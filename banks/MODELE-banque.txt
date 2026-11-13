@@ -1,0 +1,18 @@
+MODÈLE : ajouter des questions
+==============================
+1. Copiez developpement-web.php sous un autre nom, par exemple bureautique-word.php (extension .php obligatoire,
+   sinon le fichier n'est pas importé).
+2. Remplacez le contenu entre <<<'JSON' et JSON par votre liste. Chaque question :
+
+   {"level":"level-word-fond","q":"Texte de la question ?","a":["Bonne réponse","Faux 1","Faux 2","Faux 3"],"e":"Explication courte (facultative)"}
+
+   - "level" : identifiant du niveau (voir l'onglet Tests, ou la table test_levels). Exemples déjà existants :
+     level-culture, level-html, level-css, level-javascript, level-bootstrap, level-git (formation Développement web).
+   - "a" : LA PREMIÈRE réponse est la bonne. Le serveur mélange l'ordre à chaque tentative. 2 à 6 choix.
+   - Une question déjà présente dans le même niveau (même texte) est ignorée : pas de doublons.
+3. Envoyez le fichier dans le dossier banks/ du site. Il est importé automatiquement une seule fois (à la première visite).
+   Si vous modifiez ensuite le fichier, il sera réimporté : les nouvelles questions s'ajoutent, les anciennes restent.
+4. Visez 25 questions minimum par niveau (35 pour de bonnes rotations). Chaque tentative en tire 25 au hasard.
+
+Ne laissez jamais ces fichiers lisibles depuis le navigateur : un fichier .php appelé directement n'affiche rien,
+mais gardez toujours l'extension .php.

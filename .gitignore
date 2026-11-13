@@ -1,0 +1,5 @@
+data/
+*.sqlite
+.credential_key
+.dbname
+.env

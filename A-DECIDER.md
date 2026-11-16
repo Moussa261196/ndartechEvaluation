@@ -7,7 +7,7 @@
 4. **Cohortes** : pas de notion de promotion ; la prochaine se mélangera à celle-ci.
 
 ## Règles à confirmer (choix appliqués)
-5. **Délai après échec :** aucun. Après épuisement des tentatives, le formateur en accorde d’autres (onglet Tests). La règle des 4 heures n’existe plus.
+5. **Délai après échec :** 1 heure. Après épuisement des 3 tentatives (Parcours uniquement), un délai d'une heure est appliqué avant le renouvellement automatique de 3 nouvelles tentatives.
 6. **Évaluation :** une tentative par défaut ; la durée de la tentative est celle du module ; une réussite ne donne ni badge ni validation de niveau. À préciser : que doit-il se passer à l’heure de fermeture pendant une épreuve ?
 7. **Entraînement et Parcours utilisent les mêmes questions.** L’Entraînement affiche les bonnes réponses : un apprenant peut apprendre toute la banque avant de passer le Parcours. Pour l’éviter, il faudrait deux banques séparées.
 8. **Mots de passe temporaires lisibles par le formateur** : conservés chiffrés sur le serveur jusqu’au premier changement, plus jamais dans le navigateur.

@@ -35,7 +35,7 @@ Vérifications faites : 39 tests automatiques du serveur (PHP 8.3), 16 tests de 
 3. **Droits des formateurs.** Un formateur pouvait accorder des tentatives, débloquer un niveau, configurer un examen ou lire les résultats de n’importe quelle formation ou apprenant. Il est maintenant limité à ses formations et à ses apprenants. Les formation/module d’un examen viennent du niveau en base, pas du navigateur.
 4. **Journal des actions formateur.** L’identifiant du formateur n’était jamais enregistré (toujours 0). Corrigé.
 5. **Mots de passe en clair dans le navigateur.** Les mots de passe temporaires étaient copiés dans `localStorage` sans limite de durée. Ils ne sont plus stockés, et ceux déjà présents sont effacés à l’ouverture de la page.
-6. **Premier administrateur.** Plus aucun moyen de le créer sur une nouvelle installation (l’ancien accès était désactivé). Ajout de `install.html` (clé d’installation exigée, utilisable une seule fois).
+6. **Premier administrateur.** Création via l’action API `install` (clé d’installation exigée, utilisable une seule fois).
 7. **Clé secrète retirée du code livré** (`SETUP_KEY`) : voir `URGENT-SECURITE.md`.
 8. **Sauvegardes** : copie cohérente (`VACUUM INTO`) avec un nom imprévisible.
 9. **Erreurs PHP jamais affichées** dans les réponses ; une erreur serveur renvoie un message propre.

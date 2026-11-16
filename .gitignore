@@ -3,3 +3,4 @@ data/
 .credential_key
 .dbname
 .env
+node_modules/

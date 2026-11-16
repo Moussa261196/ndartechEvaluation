@@ -44,6 +44,7 @@ function out(array $a): void {
             'bad_path' => 422,
             'too_big' => 413,
             'result_immutable' => 409,
+            'attempts_cooldown' => 429,
             'server_error' => 500
         ][$a['error']] ?? null;
         if ($status !== null) http_response_code($status);
@@ -97,14 +98,16 @@ foreach ([
     'ALTER TABLE staff ADD COLUMN credential_cipher TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE learner_accounts ADD COLUMN credential_cipher TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE questions ADD COLUMN level_id TEXT',
-    'ALTER TABLE level_progress ADD COLUMN manual_unlock INTEGER NOT NULL DEFAULT 0'
+    'ALTER TABLE level_progress ADD COLUMN manual_unlock INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE level_progress ADD COLUMN cooldown_until TEXT'
 ] as $sql) { try { $db->exec($sql); } catch (PDOException $e) {} }
 $db->exec('CREATE TABLE IF NOT EXISTS staff_formations(staff_id INTEGER NOT NULL, formation_id TEXT NOT NULL, PRIMARY KEY(staff_id,formation_id), FOREIGN KEY(staff_id) REFERENCES staff(id) ON DELETE CASCADE, FOREIGN KEY(formation_id) REFERENCES formations(id) ON DELETE CASCADE)');
 $db->exec('CREATE TABLE IF NOT EXISTS test_levels(id TEXT PRIMARY KEY, formation_id TEXT NOT NULL, module_id TEXT NOT NULL, name TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, attempts_allowed INTEGER NOT NULL DEFAULT 3, pass_percent INTEGER NOT NULL DEFAULT 90, created TEXT NOT NULL, FOREIGN KEY(formation_id) REFERENCES formations(id), FOREIGN KEY(module_id) REFERENCES modules(id))');
-$db->exec('CREATE TABLE IF NOT EXISTS level_progress(id INTEGER PRIMARY KEY AUTOINCREMENT, learner_uid TEXT NOT NULL, level_id TEXT NOT NULL, module_id TEXT NOT NULL, formation_id TEXT NOT NULL, attempts_used INTEGER NOT NULL DEFAULT 0, extra_attempts INTEGER NOT NULL DEFAULT 0, attempts_allowed INTEGER NOT NULL DEFAULT 3, best_percentage INTEGER NOT NULL DEFAULT -1, validated INTEGER NOT NULL DEFAULT 0, validated_at TEXT, updated_at TEXT NOT NULL, UNIQUE(learner_uid,level_id))');
+$db->exec('CREATE TABLE IF NOT EXISTS level_progress(id INTEGER PRIMARY KEY AUTOINCREMENT, learner_uid TEXT NOT NULL, level_id TEXT NOT NULL, module_id TEXT NOT NULL, formation_id TEXT NOT NULL, attempts_used INTEGER NOT NULL DEFAULT 0, extra_attempts INTEGER NOT NULL DEFAULT 0, attempts_allowed INTEGER NOT NULL DEFAULT 3, best_percentage INTEGER NOT NULL DEFAULT -1, validated INTEGER NOT NULL DEFAULT 0, validated_at TEXT, updated_at TEXT NOT NULL, cooldown_until TEXT, UNIQUE(learner_uid,level_id))');
 $db->exec('CREATE TABLE IF NOT EXISTS test_attempts(id TEXT PRIMARY KEY, learner_uid TEXT NOT NULL, formation_id TEXT NOT NULL, module_id TEXT NOT NULL, level_id TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ("parcours","entrainement","examen")), attempt_number INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT "started" CHECK(status IN ("started","submitted","expired","cancelled")), started_at TEXT NOT NULL, expires_at TEXT, submitted_at TEXT, score INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, percentage INTEGER NOT NULL DEFAULT -1, duration_seconds INTEGER NOT NULL DEFAULT 0, snapshot TEXT NOT NULL DEFAULT "[]", submission_id TEXT UNIQUE, created TEXT NOT NULL)');
 $db->exec('CREATE TABLE IF NOT EXISTS test_attempt_answers(attempt_id TEXT NOT NULL, question_id INTEGER NOT NULL, answer_id INTEGER, multiple_answer_ids TEXT NOT NULL DEFAULT "[]", saved_at TEXT NOT NULL, PRIMARY KEY(attempt_id,question_id), FOREIGN KEY(attempt_id) REFERENCES test_attempts(id) ON DELETE CASCADE)');
 $db->exec('CREATE TABLE IF NOT EXISTS exam_configs(id TEXT PRIMARY KEY, formation_id TEXT NOT NULL, module_id TEXT NOT NULL, level_id TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT "desactive" CHECK(state IN ("desactive","programme","actif","ferme","termine")), starts_at TEXT, closes_at TEXT, attempts_allowed INTEGER NOT NULL DEFAULT 1, pass_percent INTEGER NOT NULL DEFAULT 90, correction_mode TEXT NOT NULL DEFAULT "manuel" CHECK(correction_mode IN ("immediate","programme","manuel")), correction_at TEXT, correction_published INTEGER NOT NULL DEFAULT 0, updated_by TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL)');
+$db->exec('CREATE TABLE IF NOT EXISTS formation_exam_configs(formation_id TEXT PRIMARY KEY, active INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT "desactive" CHECK(state IN ("desactive","programme","actif","ferme","termine")), starts_at TEXT, closes_at TEXT, attempts_allowed INTEGER NOT NULL DEFAULT 1, pass_percent INTEGER NOT NULL DEFAULT 90, correction_mode TEXT NOT NULL DEFAULT "manuel" CHECK(correction_mode IN ("immediate","programme","manuel")), correction_at TEXT, correction_published INTEGER NOT NULL DEFAULT 0, updated_by TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL)');
 $db->exec('CREATE TABLE IF NOT EXISTS trainer_actions(id INTEGER PRIMARY KEY AUTOINCREMENT, trainer_staff_id INTEGER NOT NULL, action TEXT NOT NULL, learner_uid TEXT NOT NULL, level_id TEXT, module_id TEXT, details TEXT NOT NULL DEFAULT "", created_at TEXT NOT NULL)');
 $db->exec('CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, actor_staff_id INTEGER NOT NULL DEFAULT 0, actor_username TEXT NOT NULL DEFAULT "", actor_role TEXT NOT NULL, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT NOT NULL DEFAULT "", details TEXT NOT NULL DEFAULT "{}", created_at TEXT NOT NULL)');
 $db->exec('CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC)');
@@ -201,6 +204,18 @@ if (!$seedDone) {
     setCfg($db, 'seed_v2', '1');
 }
 importQuestionBanks($db);
+$formationExamDefault = $db->prepare('INSERT OR IGNORE INTO formation_exam_configs(formation_id,active,state,attempts_allowed,pass_percent,correction_mode,correction_published,updated_by,updated_at) VALUES(?,0,"desactive",1,90,"manuel",0,"system",?)');
+foreach ($formations as $formation) $formationExamDefault->execute([$formation[0], gmdate('c')]);
+if ((string)cfg($db, 'formation_exam_config_v1') !== '1') {
+    $legacyExam = $db->prepare('SELECT active,state,starts_at,closes_at,attempts_allowed,pass_percent,correction_mode,correction_at,correction_published,updated_by,updated_at FROM exam_configs WHERE formation_id=? ORDER BY active DESC,updated_at DESC,id DESC LIMIT 1');
+    $migrateExam = $db->prepare('UPDATE formation_exam_configs SET active=?,state=?,starts_at=?,closes_at=?,attempts_allowed=?,pass_percent=?,correction_mode=?,correction_at=?,correction_published=?,updated_by=?,updated_at=? WHERE formation_id=?');
+    foreach ($formations as $formation) {
+        $legacyExam->execute([$formation[0]]);
+        $legacy = $legacyExam->fetch(PDO::FETCH_ASSOC);
+        if ($legacy) $migrateExam->execute([(int)$legacy['active'],$legacy['state'],$legacy['starts_at'],$legacy['closes_at'],(int)$legacy['attempts_allowed'],(int)$legacy['pass_percent'],$legacy['correction_mode'],$legacy['correction_at'],(int)$legacy['correction_published'],$legacy['updated_by'],$legacy['updated_at'],$formation[0]]);
+    }
+    setCfg($db, 'formation_exam_config_v1', '1');
+}
 function seedModuleQuestions(PDO $db, string $moduleId, array $questions): void {
     $qCount = $db->prepare('SELECT COUNT(*) FROM questions WHERE module_id=?'); $qCount->execute([$moduleId]);
     if ((int)$qCount->fetchColumn() > 0) return;
@@ -404,6 +419,15 @@ function currentStaffId(PDO $db): int {
     $id = $s->fetchColumn();
     return $id === false ? 0 : (int)$id;
 }
+function currentStaffDisplayName(PDO $db): string {
+    $username = (string)($_SESSION['staff_username'] ?? '');
+    if ($username === '') return '';
+    $s = $db->prepare('SELECT first_name,last_name FROM staff WHERE LOWER(username)=LOWER(?) LIMIT 1');
+    $s->execute([$username]);
+    $staff = $s->fetch(PDO::FETCH_ASSOC);
+    $name = $staff ? trim((string)$staff['first_name'].' '.(string)$staff['last_name']) : '';
+    return $name !== '' ? $name : $username;
+}
 function auditLog(PDO $db, string $action, string $resourceType, string $resourceId = '', array $details = []): void {
     if (!canAdmin() && !canTrainer()) return;
     $encoded = json_encode($details, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
@@ -457,6 +481,8 @@ function trainerOwnsLearnerUid(PDO $db, int $staffId, string $uid): bool {
     return (bool)$s->fetchColumn();
 }
 const QUESTIONS_PER_ATTEMPT = 25;
+const LEVEL_ATTEMPT_COOLDOWN_SECONDS = 3600;
+const LEVEL_ATTEMPTS_AFTER_COOLDOWN = 3;
 // Questions envoyées au navigateur : sans bonnes réponses ni explications, sauf en entraînement.
 function publicQuestions(array $snapshot, bool $reveal): array {
     $out = [];
@@ -498,6 +524,23 @@ function levelSnapshot(PDO $db, string $moduleId, string $levelId): array {
     unset($question);
     return $all;
 }
+function formationExamSnapshot(PDO $db, string $formationId): array {
+    $questionsQuery = $db->prepare('SELECT q.id,q.question,q.type,q.points,q.explanation FROM questions q JOIN test_levels l ON l.id=q.level_id WHERE l.formation_id=? AND l.active=1 AND q.active=1');
+    $questionsQuery->execute([$formationId]);
+    $questions = $questionsQuery->fetchAll(PDO::FETCH_ASSOC);
+    shuffle($questions);
+    $questions = array_slice($questions, 0, QUESTIONS_PER_ATTEMPT);
+    foreach ($questions as &$question) {
+        $answersQuery = $db->prepare('SELECT id,answer,is_correct,position FROM answers WHERE question_id=? ORDER BY position,id');
+        $answersQuery->execute([(int)$question['id']]);
+        $question['answers'] = $answersQuery->fetchAll(PDO::FETCH_ASSOC);
+        shuffle($question['answers']);
+        foreach ($question['answers'] as $position => &$answer) $answer['position'] = $position;
+        unset($answer);
+    }
+    unset($question);
+    return $questions;
+}
 function ensureProgress(PDO $db, string $uid, string $levelId, string $moduleId, string $formationId): array {
     $level = $db->prepare('SELECT attempts_allowed,pass_percent FROM test_levels WHERE id=?'); $level->execute([$levelId]); $levelRow = $level->fetch(PDO::FETCH_ASSOC);
     $allowed = $levelRow ? (int)$levelRow['attempts_allowed'] : 3; $threshold = $levelRow ? (int)$levelRow['pass_percent'] : 90;
@@ -507,31 +550,304 @@ function ensureProgress(PDO $db, string $uid, string $levelId, string $moduleId,
     $progress['_threshold'] = $threshold;
     return $progress;
 }
+function refreshLevelAttemptCycle(PDO $db, string $uid, array $level, array $progress): array {
+    if ($uid === '' || (int)($progress['validated'] ?? 0) === 1) return $progress;
+    $levelId = (string)$level['id'];
+    $now = time();
+    $retryAt = !empty($progress['cooldown_until']) ? strtotime((string)$progress['cooldown_until']) : null;
+    if ($retryAt === false) $retryAt = null;
+    $allowed = (int)($progress['attempts_allowed'] ?? $level['attempts_allowed'] ?? 3) + (int)($progress['extra_attempts'] ?? 0);
+    if ($retryAt === null && (int)($progress['attempts_used'] ?? 0) < $allowed) {
+        $progress['attempts_remaining'] = max(0, $allowed - (int)$progress['attempts_used']);
+        return $progress;
+    }
+
+    if ($retryAt === null) {
+        $lastAttemptQuery = $db->prepare('SELECT id,status,started_at,expires_at,submitted_at FROM test_attempts WHERE learner_uid=? AND level_id=? AND mode="parcours" ORDER BY attempt_number DESC,started_at DESC LIMIT 1');
+        $lastAttemptQuery->execute([$uid, $levelId]);
+        $lastAttempt = $lastAttemptQuery->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($lastAttempt && $lastAttempt['status'] === 'started') {
+            $expiresAt = !empty($lastAttempt['expires_at']) ? strtotime((string)$lastAttempt['expires_at']) : false;
+            if (!$expiresAt || $expiresAt > $now) {
+                $progress['attempts_remaining'] = 0;
+                return $progress;
+            }
+            $db->prepare('UPDATE test_attempts SET status="expired" WHERE learner_uid=? AND id=? AND status="started"')->execute([$uid, $lastAttempt['id']]);
+            $cooldownStart = $expiresAt;
+        } elseif ($lastAttempt && $lastAttempt['status'] === 'submitted') {
+            $cooldownStart = !empty($lastAttempt['submitted_at']) ? strtotime((string)$lastAttempt['submitted_at']) : false;
+            if (!$cooldownStart) $cooldownStart = $now;
+        } elseif ($lastAttempt && $lastAttempt['status'] === 'expired') {
+            $cooldownStart = !empty($lastAttempt['expires_at']) ? strtotime((string)$lastAttempt['expires_at']) : false;
+            if (!$cooldownStart) $cooldownStart = $now;
+        } else {
+            $cooldownStart = !empty($progress['updated_at']) ? strtotime((string)$progress['updated_at']) : false;
+            if (!$cooldownStart) $cooldownStart = $now;
+        }
+        $retryAt = $cooldownStart + LEVEL_ATTEMPT_COOLDOWN_SECONDS;
+        $progress['cooldown_until'] = gmdate('c', $retryAt);
+        $db->prepare('UPDATE level_progress SET cooldown_until=? WHERE learner_uid=? AND level_id=?')->execute([$progress['cooldown_until'], $uid, $levelId]);
+    }
+
+    if ($retryAt <= $now) {
+        $updatedAt = gmdate('c', $now);
+        $db->prepare('UPDATE level_progress SET attempts_used=0,extra_attempts=0,attempts_allowed=?,cooldown_until=NULL,updated_at=? WHERE learner_uid=? AND level_id=?')->execute([LEVEL_ATTEMPTS_AFTER_COOLDOWN, $updatedAt, $uid, $levelId]);
+        $progress['attempts_used'] = 0;
+        $progress['extra_attempts'] = 0;
+        $progress['attempts_allowed'] = LEVEL_ATTEMPTS_AFTER_COOLDOWN;
+        $progress['cooldown_until'] = null;
+        $progress['updated_at'] = $updatedAt;
+        $progress['attempts_remaining'] = LEVEL_ATTEMPTS_AFTER_COOLDOWN;
+        $progress['cooldown_remaining_seconds'] = 0;
+        return $progress;
+    }
+
+    $progress['cooldown_remaining_seconds'] = $retryAt - $now;
+    $progress['attempts_remaining'] = 0;
+    return $progress;
+}
 function levelIsOfficiallyValidated(array $progress, int $threshold): bool {
     if ((int)($progress['validated'] ?? 0) !== 1) return false;
     return (int)($progress['best_percentage'] ?? -1) >= $threshold;
 }
-function projectRubric(string $formationId): array {
+function projectRubricDetails(string $formationId): array {
     $rubrics = [
-        'bureautique' => ['word'=>'Projet Word','excel'=>'Projet Excel','powerpoint'=>'Projet PowerPoint','presentation'=>'Présentation orale','jury'=>'Questions jury'],
-        'infographie' => ['logo'=>'Logo','charte'=>'Charte graphique','carte_visite'=>'Carte de visite','affiche'=>'Affiche','flyer'=>'Flyer','etiquette'=>'Étiquette','mockup'=>'Mockup','portfolio'=>'Portfolio','presentation'=>'Présentation'],
-        'developpement-web' => ['site1'=>'Site 1','site2'=>'Site 2','site3'=>'Site 3','soutenance'=>'Présentation + questions jury']
+        'bureautique' => [
+            'word'=>['label'=>'Projet Word','items'=>[
+                'structure'=>['label'=>'Structure du document','max'=>3],
+                'redaction'=>['label'=>'Qualité rédactionnelle et orthographe','max'=>4],
+                'mise_en_forme'=>['label'=>'Mise en forme et cohérence visuelle','max'=>3],
+                'contenu'=>['label'=>'Pertinence et exactitude du contenu','max'=>4],
+                'visuels'=>['label'=>'Intégration des images, tableaux et schémas','max'=>3],
+                'consignes'=>['label'=>'Respect des consignes et de la mise en page','max'=>3]
+            ]],
+            'excel'=>['label'=>'Projet Excel','items'=>[
+                'organisation'=>['label'=>'Organisation et présentation des feuilles','max'=>3],
+                'formules'=>['label'=>'Utilisation des formules et fonctions','max'=>5],
+                'mise_en_forme'=>['label'=>'Mise en forme, alignement et lisibilité','max'=>3],
+                'exactitude'=>['label'=>'Exactitude des données et des calculs','max'=>4],
+                'graphiques'=>['label'=>'Graphiques ou tableaux croisés si demandés','max'=>2],
+                'consignes'=>['label'=>'Respect des consignes et du sujet','max'=>3]
+            ]],
+            'powerpoint'=>['label'=>'Projet PowerPoint','items'=>[
+                'structure'=>['label'=>'Structure du plan et progression logique','max'=>3],
+                'qualite_visuelle'=>['label'=>'Qualité visuelle et lisibilité des diapositives','max'=>4],
+                'contenu'=>['label'=>'Pertinence et clarté du contenu','max'=>4],
+                'elements_visuels'=>['label'=>'Utilisation des images, animations et transitions','max'=>3],
+                'redaction'=>['label'=>'Orthographe et qualité rédactionnelle','max'=>3],
+                'consignes'=>['label'=>'Respect des consignes et du nombre de diapositives','max'=>3]
+            ]],
+            'presentation'=>['label'=>'Présentation orale','items'=>[
+                'maitrise_sujet'=>['label'=>'Maîtrise du sujet présenté','max'=>5],
+                'expression'=>['label'=>'Clarté de l’expression et fluidité du discours','max'=>4],
+                'temps'=>['label'=>'Gestion du temps imparti','max'=>3],
+                'posture'=>['label'=>'Aisance, posture et contact avec le jury','max'=>4],
+                'support'=>['label'=>'Qualité et utilisation du support','max'=>4]
+            ]],
+            'jury'=>['label'=>'Questions du jury','items'=>[
+                'exactitude'=>['label'=>'Pertinence et exactitude des réponses','max'=>6],
+                'argumentation'=>['label'=>'Clarté de l’argumentation','max'=>5],
+                'reactivite'=>['label'=>'Réactivité face aux questions','max'=>4],
+                'maitrise_outils'=>['label'=>'Maîtrise technique des outils utilisés','max'=>5]
+            ]]
+        ],
+        'infographie' => [
+            'logo'=>['label'=>'Logo','items'=>[
+                'couleurs'=>['label'=>'Couleurs et cohérence de la palette','max'=>4],
+                'typographies'=>['label'=>'Lisibilité et choix des typographies','max'=>4],
+                'regles'=>['label'=>'Clarté des règles d’utilisation du logo','max'=>4],
+                'mise_en_page'=>['label'=>'Structure et qualité de la mise en page','max'=>3]
+            ]],
+            'charte'=>['label'=>'Charte graphique','items'=>[
+                'hierarchie'=>['label'=>'Mise en page et hiérarchie visuelle','max'=>3],
+                'lisibilite'=>['label'=>'Lisibilité des informations','max'=>3],
+                'normes'=>['label'=>'Respect des marges et du fond perdu','max'=>2],
+                'creativite'=>['label'=>'Créativité et qualité du design','max'=>2]
+            ]],
+            'carte_visite'=>['label'=>'Carte de visite','items'=>[
+                'impact'=>['label'=>'Impact visuel','max'=>5],
+                'composition'=>['label'=>'Équilibre de la composition','max'=>4],
+                'images'=>['label'=>'Qualité et résolution des images','max'=>3],
+                'message'=>['label'=>'Clarté du message ou du slogan','max'=>3]
+            ]],
+            'affiche'=>['label'=>'Affiche A3','items'=>[
+                'structure'=>['label'=>'Organisation du contenu','max'=>3],
+                'design'=>['label'=>'Cohérence graphique','max'=>3],
+                'lisibilite'=>['label'=>'Lisibilité du texte','max'=>2],
+                'format'=>['label'=>'Respect du format et du fond perdu','max'=>2]
+            ]],
+            'flyer'=>['label'=>'Flyer A5','items'=>[
+                'contenu'=>['label'=>'Pertinence et complétude du contenu','max'=>3],
+                'design'=>['label'=>'Esthétique et cohérence graphique','max'=>3],
+                'lisibilite'=>['label'=>'Facilité de lecture','max'=>2],
+                'format'=>['label'=>'Respect du format et du support','max'=>2]
+            ]],
+            'etiquette'=>['label'=>'Étiquette','items'=>[
+                'realisme'=>['label'=>'Réalisme du rendu','max'=>2],
+                'integration'=>['label'=>'Intégration au produit','max'=>2],
+                'qualite'=>['label'=>'Qualité globale de réalisation','max'=>1]
+            ]],
+            'mockup'=>['label'=>'Mockups','items'=>[
+                'originalite'=>['label'=>'Originalité','max'=>2],
+                'coherence'=>['label'=>'Cohérence graphique','max'=>5],
+                'theme'=>['label'=>'Respect du thème','max'=>3]
+            ]],
+            'portfolio'=>['label'=>'Portfolio','items'=>[
+                'realisations'=>['label'=>'Qualité et pertinence des réalisations','max'=>4],
+                'organisation'=>['label'=>'Organisation et présentation du portfolio','max'=>1]
+            ]],
+            'presentation'=>['label'=>'Présentation et questions-réponses','items'=>[
+                'comprehension_projet'=>['label'=>'Compréhension du projet et de ses objectifs','max'=>2],
+                'demarche_creative'=>['label'=>'Présentation de la démarche créative','max'=>3],
+                'pertinence_informations'=>['label'=>'Justification des choix graphiques','max'=>2],
+                'elocution'=>['label'=>'Clarté de l’élocution et du débit','max'=>3],
+                'langage'=>['label'=>'Usage d’un vocabulaire professionnel','max'=>2],
+                'posture'=>['label'=>'Contact visuel et posture','max'=>2],
+                'temps'=>['label'=>'Respect de la durée prévue','max'=>3],
+                'maitrise_reponses'=>['label'=>'Maîtrise du projet et réponses au jury','max'=>3],
+                'exactitude_reponses'=>['label'=>'Exactitude des réponses','max'=>4],
+                'presentation_reponses'=>['label'=>'Qualité de la présentation des réponses','max'=>1]
+            ]]
+        ],
+        'developpement-web' => [
+            'site1'=>['label'=>'Projet web 1','items'=>[
+                'design'=>['label'=>'Qualité du design et de l’ergonomie','max'=>3],
+                'html'=>['label'=>'Structure HTML sémantique','max'=>2],
+                'css'=>['label'=>'Mise en forme CSS','max'=>3],
+                'responsive'=>['label'=>'Adaptation mobile, tablette et ordinateur','max'=>2],
+                'javascript'=>['label'=>'Fonctionnalités JavaScript','max'=>2],
+                'contenu'=>['label'=>'Pertinence et qualité du contenu','max'=>2],
+                'navigation'=>['label'=>'Navigation et liens fonctionnels','max'=>2],
+                'cahier_charges'=>['label'=>'Respect du cahier des charges','max'=>2],
+                'originalite'=>['label'=>'Originalité et créativité','max'=>2]
+            ]],
+            'site2'=>['label'=>'Projet web 2','items'=>[
+                'design'=>['label'=>'Qualité du design et de l’ergonomie','max'=>3],
+                'html'=>['label'=>'Structure HTML sémantique','max'=>2],
+                'css'=>['label'=>'Mise en forme CSS','max'=>3],
+                'responsive'=>['label'=>'Adaptation mobile, tablette et ordinateur','max'=>2],
+                'javascript'=>['label'=>'Fonctionnalités JavaScript','max'=>2],
+                'contenu'=>['label'=>'Pertinence et qualité du contenu','max'=>2],
+                'navigation'=>['label'=>'Navigation et liens fonctionnels','max'=>2],
+                'cahier_charges'=>['label'=>'Respect du cahier des charges','max'=>2],
+                'originalite'=>['label'=>'Originalité et créativité','max'=>2]
+            ]],
+            'site3'=>['label'=>'Projet web 3','items'=>[
+                'design'=>['label'=>'Qualité du design et de l’ergonomie','max'=>3],
+                'html'=>['label'=>'Structure HTML sémantique','max'=>2],
+                'css'=>['label'=>'Mise en forme CSS','max'=>3],
+                'responsive'=>['label'=>'Adaptation mobile, tablette et ordinateur','max'=>2],
+                'javascript'=>['label'=>'Fonctionnalités JavaScript','max'=>2],
+                'contenu'=>['label'=>'Pertinence et qualité du contenu','max'=>2],
+                'navigation'=>['label'=>'Navigation et liens fonctionnels','max'=>2],
+                'cahier_charges'=>['label'=>'Respect du cahier des charges','max'=>2],
+                'originalite'=>['label'=>'Originalité et créativité','max'=>2]
+            ]],
+            'soutenance'=>['label'=>'Soutenance et questions-réponses','items'=>[
+                'structure_expose'=>['label'=>'Clarté et structure de l’exposé','max'=>5],
+                'maitrise_projet'=>['label'=>'Maîtrise des projets présentés','max'=>6],
+                'supports'=>['label'=>'Qualité des supports et démonstration','max'=>5],
+                'temps_aisance'=>['label'=>'Respect du temps et aisance orale','max'=>4],
+                'comprehension_questions'=>['label'=>'Compréhension des questions','max'=>4],
+                'exactitude_reponses'=>['label'=>'Pertinence et exactitude des réponses','max'=>6],
+                'choix_techniques'=>['label'=>'Justification des choix techniques','max'=>6],
+                'argumentation'=>['label'=>'Aisance et qualité de l’argumentation','max'=>4]
+            ]]
+        ]
     ];
     return $rubrics[$formationId] ?? [];
 }
+function projectRubric(string $formationId): array {
+    $rubric = [];
+    foreach (projectRubricDetails($formationId) as $key=>$definition) $rubric[$key] = $definition['label'];
+    return $rubric;
+}
+function projectGradeCommentOptions(): array {
+    return [
+        'Maîtrise excellente du critère.',
+        'Très bonne maîtrise, avec quelques détails à affiner.',
+        'Critère atteint conformément aux attentes.',
+        'Résultat satisfaisant ; quelques améliorations sont possibles.',
+        'Éléments pertinents, mais encore incomplets.',
+        'Plusieurs points importants restent à améliorer.',
+        'Le travail doit être complété.',
+        'Le résultat ne répond pas encore aux consignes.',
+        'Présentation claire et soignée.',
+        'Démarche créative et pertinente.',
+        'Critère non observé ou non applicable.'
+    ];
+}
+function readProjectGradeWeights(PDO $db, string $formationId): array {
+    $rubric = projectRubricDetails($formationId); $weights = array_fill_keys(array_keys($rubric), 1.0);
+    if (!$weights) return [];
+    $s = $db->prepare('SELECT data FROM kv WHERE path=?'); $s->execute(['project_grade_weights/'.$formationId]); $raw = $s->fetchColumn();
+    if ($raw === false) return $weights;
+    $stored = json_decode((string)$raw, true);
+    if (!is_array($stored)) return $weights;
+    foreach ($weights as $key=>$_) {
+        $weight = $stored[$key] ?? null;
+        if (is_numeric($weight) && is_finite((float)$weight) && (float)$weight >= 0.1 && (float)$weight <= 10) $weights[$key] = round((float)$weight,2);
+    }
+    return $weights;
+}
 function readProjectGrades(PDO $db, string $uid, string $formationId): array {
-    $rubric = projectRubric($formationId); $scores = array_fill_keys(array_keys($rubric), null);
+    $definitions = projectRubricDetails($formationId); $rubric = projectRubric($formationId);
+    $scores = array_fill_keys(array_keys($rubric), null); $legacyScores = array_fill_keys(array_keys($rubric), null);
+    $details = []; $evaluations = []; $weights = readProjectGradeWeights($db,$formationId);
     $s = $db->prepare('SELECT data FROM kv WHERE path=?'); $s->execute(['project_grades/'.$uid]); $raw = $s->fetchColumn();
     if ($raw !== false) {
         $stored = json_decode((string)$raw, true);
-        if (is_array($stored) && ($stored['formation_id'] ?? '') === $formationId && is_array($stored['scores'] ?? null)) {
-            foreach ($scores as $key => $_) if (array_key_exists($key, $stored['scores']) && is_numeric($stored['scores'][$key]) && (float)$stored['scores'][$key] >= 0 && (float)$stored['scores'][$key] <= 20) $scores[$key] = (float)$stored['scores'][$key];
+        if (is_array($stored) && ($stored['formation_id'] ?? '') === $formationId) {
+            $legacy = (int)($stored['version'] ?? 1) >= 2 ? ($stored['legacy_scores'] ?? []) : ($stored['scores'] ?? []);
+            if (is_array($legacy)) foreach ($legacyScores as $key=>$_) {
+                $value = $legacy[$key] ?? null;
+                if (is_numeric($value) && is_finite((float)$value) && (float)$value >= 0 && (float)$value <= 20) $legacyScores[$key] = round((float)$value,2);
+            }
+            $savedDetails = is_array($stored['details'] ?? null) ? $stored['details'] : [];
+            $savedEvaluations = is_array($stored['evaluations'] ?? null) ? $stored['evaluations'] : [];
+            foreach ($definitions as $key=>$definition) {
+                $saved = is_array($savedDetails[$key] ?? null) ? $savedDetails[$key] : [];
+                $savedScores = is_array($saved['scores'] ?? null) ? $saved['scores'] : [];
+                $savedComments = is_array($saved['comments'] ?? null) ? $saved['comments'] : [];
+                $criterionScores = []; $criterionComments = []; $complete = true;
+                foreach ($definition['items'] as $itemKey=>$item) {
+                    $value = $savedScores[$itemKey] ?? null;
+                    $valid = $value !== null && is_numeric($value) && is_finite((float)$value) && (float)$value >= 0 && (float)$value <= (float)$item['max'];
+                    $criterionScores[$itemKey] = $valid ? round((float)$value,2) : null;
+                    if (!$valid) $complete = false;
+                    $comment = $savedComments[$itemKey] ?? '';
+                    $criterionComments[$itemKey] = in_array($comment,projectGradeCommentOptions(),true) ? $comment : '';
+                }
+                $details[$key] = ['scores'=>$criterionScores,'comments'=>$criterionComments];
+                $meta = is_array($savedEvaluations[$key] ?? null) ? $savedEvaluations[$key] : [];
+                $evaluations[$key] = ['evaluated_at'=>(string)($meta['evaluated_at'] ?? ''),'evaluator'=>(string)($meta['evaluator'] ?? '')];
+                if ($complete && $definition['items']) {
+                    $points = 0.0; $maximum = 0.0;
+                    foreach ($definition['items'] as $itemKey=>$item) { $points += (float)$criterionScores[$itemKey]; $maximum += (float)$item['max']; }
+                    $scores[$key] = $maximum > 0 ? round($points*20/$maximum,2) : null;
+                } elseif ($legacyScores[$key] !== null) $scores[$key] = $legacyScores[$key];
+            }
         }
     }
-    $graded = array_filter($scores, static function ($score) { return $score !== null; });
-    $presentKeys = $formationId === 'bureautique' ? ['presentation','jury'] : ($formationId === 'developpement-web' ? ['soutenance'] : ['presentation']);
-    $present = array_filter(array_intersect_key($scores, array_flip($presentKeys)), static function ($score) { return $score !== null; });
-    return ['rubric'=>$rubric,'scores'=>$scores,'graded_count'=>count($graded),'rubric_count'=>count($rubric),'complete'=>count($rubric)>0 && count($graded)===count($rubric),'project_score'=>$graded ? round(array_sum($graded)/count($graded),2) : 0,'presentation_score'=>$present ? round(array_sum($present)/count($present),2) : 0];
+    $detailedCount = 0; $legacyCount = 0; $weightedTotal = 0.0; $weightTotal = 0.0;
+    foreach ($definitions as $key=>$definition) {
+        $isDetailed = isset($details[$key]['scores']) && count($details[$key]['scores']) === count($definition['items']);
+        foreach ($details[$key]['scores'] ?? [] as $value) if ($value === null) { $isDetailed = false; break; }
+        if ($isDetailed && $definition['items']) $detailedCount++;
+        elseif ($legacyScores[$key] !== null && $scores[$key] !== null) $legacyCount++;
+        if ($scores[$key] !== null) { $weight=(float)($weights[$key]??1); $weightedTotal+=(float)$scores[$key]*$weight; $weightTotal+=$weight; }
+    }
+    $gradedCount = count($definitions); $complete = $gradedCount > 0 && $detailedCount === $gradedCount;
+    $projectScore = $weightTotal > 0 ? round($weightedTotal/$weightTotal,2) : null;
+    $presentationKeys = $formationId === 'bureautique' ? ['presentation'] : ($formationId === 'developpement-web' ? ['soutenance'] : ['presentation']);
+    $presentationValues = [];
+    foreach ($presentationKeys as $key) if (isset($scores[$key])) $presentationValues[] = (float)$scores[$key];
+    $presentationScore = $presentationValues ? round(array_sum($presentationValues)/count($presentationValues),2) : null;
+    return [
+        'rubric'=>$rubric,'rubric_details'=>$definitions,'weights'=>$weights,'scores'=>$scores,'legacy_scores'=>$legacyScores,'details'=>$details,'evaluations'=>$evaluations,
+        'graded_count'=>$detailedCount,'rubric_count'=>$gradedCount,'complete'=>$complete,'legacy_count'=>$legacyCount,
+        'project_score'=>$projectScore,'presentation_score'=>$presentationScore
+    ];
 }
 function calculateTestGrade(PDO $db, string $uid, string $formationId): array {
     $formation = $db->prepare('SELECT name FROM formations WHERE id=?'); $formation->execute([$formationId]); $formationName = (string)($formation->fetchColumn() ?: '');
@@ -546,25 +862,28 @@ function calculateTestGrade(PDO $db, string $uid, string $formationId): array {
     }
     $stepCount = count($levels); $pathwayComplete = $stepCount === 6 && $validatedCount === 6;
     $pathwayScore = $pathwayComplete ? 10 : 0;
-    $exam = ['score'=>0,'status'=>'not_taken','passed'=>false,'percentage'=>null,'threshold'=>90,'attempt_id'=>null,'level_name'=>$stepCount ? (string)$levels[$stepCount-1]['name'] : null];
+    $examConfig = activeExam($db, $formationId);
+    $exam = ['score'=>0,'status'=>'not_taken','passed'=>false,'percentage'=>null,'threshold'=>max(0,(int)($examConfig['pass_percent']??90)),'attempt_id'=>null,'level_name'=>'Examen général'];
     if ($stepCount > 0) {
-        $finalLevel = $levels[$stepCount-1]; $exam['threshold'] = max(0, (int)$finalLevel['pass_percent']);
-        $attemptQuery = $db->prepare('SELECT id,status,score,total,percentage,submitted_at,started_at FROM test_attempts WHERE learner_uid=? AND formation_id=? AND level_id=? AND mode="examen" AND status="submitted" ORDER BY submitted_at DESC,id DESC LIMIT 1');
-        $attemptQuery->execute([$uid,$formationId,(string)$finalLevel['id']]); $attempt = $attemptQuery->fetch(PDO::FETCH_ASSOC);
-        $activeQuery = $db->prepare('SELECT id,started_at FROM test_attempts WHERE learner_uid=? AND formation_id=? AND level_id=? AND mode="examen" AND status="started" ORDER BY started_at DESC,id DESC LIMIT 1');
-        $activeQuery->execute([$uid,$formationId,(string)$finalLevel['id']]); $activeAttempt = $activeQuery->fetch(PDO::FETCH_ASSOC);
-        if ($activeAttempt && (!$attempt || (string)$activeAttempt['started_at'] > (string)$attempt['submitted_at'])) { $exam['attempt_id']=(string)$activeAttempt['id']; $exam['status']='in_progress'; }
-        elseif ($attempt) {
-            $exam['attempt_id'] = (string)$attempt['id'];
-            if ((int)$attempt['total'] > 0) { $exam['percentage'] = (int)$attempt['percentage']; $exam['passed'] = (int)$attempt['score']*100 >= $exam['threshold']*(int)$attempt['total']; $exam['status'] = $exam['passed'] ? 'passed' : 'failed'; $exam['score'] = $exam['passed'] ? 10 : 0; }
+        $attemptQuery = $db->prepare('SELECT id,status,score,total,percentage,submitted_at,started_at FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen" AND status="submitted" ORDER BY CASE WHEN total>0 THEN score*1.0/total ELSE -1 END DESC,submitted_at DESC,id DESC LIMIT 1');
+        $attemptQuery->execute([$uid,$formationId]); $attempt = $attemptQuery->fetch(PDO::FETCH_ASSOC);
+        $activeQuery = $db->prepare('SELECT id,started_at FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen" AND status="started" ORDER BY started_at DESC,id DESC LIMIT 1');
+        $activeQuery->execute([$uid,$formationId]); $activeAttempt = $activeQuery->fetch(PDO::FETCH_ASSOC);
+        if ($attempt) {
+            $exam['best_attempt_id']=(string)$attempt['id'];
+            $exam['best_submitted_at']=(string)$attempt['submitted_at'];
+            if ((int)$attempt['total'] > 0) { $exam['percentage'] = (int)$attempt['percentage']; $exam['passed'] = (int)$attempt['score']*100 >= $exam['threshold']*(int)$attempt['total']; $exam['status'] = $exam['passed'] ? 'passed' : 'failed'; $exam['score'] = round((int)$attempt['score'] * 10 / (int)$attempt['total'], 2); }
         }
+        if ($activeAttempt) { $exam['attempt_id']=(string)$activeAttempt['id']; $exam['status']='in_progress'; }
+        elseif ($attempt) $exam['attempt_id']=(string)$attempt['id'];
     }
-    $project = readProjectGrades($db,$uid,$formationId); $testsTotal=$pathwayScore+(int)$exam['score']; $finalAverage=round(($testsTotal+$project['project_score'])/2,2);
-    $mention=$finalAverage>=16?'Très Bien':($finalAverage>=14?'Bien':($finalAverage>=12?'Assez Bien':($finalAverage>=10?'Passable':'Insuffisant')));
-    return ['learner_uid'=>$uid,'formation_id'=>$formationId,'formation_name'=>$formationName,'pathway'=>['score'=>$pathwayScore,'complete'=>$pathwayComplete,'validated_count'=>$validatedCount,'total_steps'=>$stepCount,'levels'=>$levelStates],'final_exam'=>$exam,'tests_total'=>$testsTotal,'project_score'=>$project['project_score'],'presentation_score'=>$project['presentation_score'],'project'=>$project,'final_average'=>$finalAverage,'mention'=>$mention,'total'=>$testsTotal,'maximum'=>20];
+    $project = readProjectGrades($db,$uid,$formationId); $testsTotal=round($pathwayScore+(float)$exam['score'],2);
+    $finalAverage=$project['project_score']===null?null:round(($testsTotal+$project['project_score'])/2,2);
+    $mention=$finalAverage===null||!$project['complete']?null:($finalAverage>=16?'Très Bien':($finalAverage>=14?'Bien':($finalAverage>=12?'Assez Bien':($finalAverage>=10?'Passable':'Insuffisant'))));
+    return ['learner_uid'=>$uid,'formation_id'=>$formationId,'formation_name'=>$formationName,'pathway'=>['score'=>$pathwayScore,'complete'=>$pathwayComplete,'validated_count'=>$validatedCount,'total_steps'=>$stepCount,'levels'=>$levelStates],'final_exam'=>$exam,'tests_total'=>$testsTotal,'project_score'=>$project['project_score'],'presentation_score'=>$project['presentation_score'],'project'=>$project,'final_average'=>$finalAverage,'final_average_status'=>$project['complete']?'definitive':'provisional','mention'=>$mention,'total'=>$testsTotal,'maximum'=>20];
 }
-function activeExam(PDO $db, string $levelId): array {
-    $s = $db->prepare('SELECT * FROM exam_configs WHERE level_id=? LIMIT 1'); $s->execute([$levelId]); $exam = $s->fetch(PDO::FETCH_ASSOC);
+function activeExam(PDO $db, string $formationId): array {
+    $s = $db->prepare('SELECT * FROM formation_exam_configs WHERE formation_id=? LIMIT 1'); $s->execute([$formationId]); $exam = $s->fetch(PDO::FETCH_ASSOC);
     if (!$exam) return ['exists'=>false,'active'=>false,'state'=>'desactive'];
     $now = time(); $start = $exam['starts_at'] ? strtotime((string)$exam['starts_at']) : null; $close = $exam['closes_at'] ? strtotime((string)$exam['closes_at']) : null;
     if ((int)$exam['active'] === 1 && $start !== null && $start <= $now && ($close === null || $close >= $now)) $exam['state'] = 'actif'; elseif ((int)$exam['active'] === 1 && $close !== null && $close < $now) $exam['state'] = 'ferme'; elseif ((int)$exam['active'] === 1 && $start !== null && $start > $now) $exam['state'] = 'programme'; elseif ((int)$exam['active'] === 0) $exam['state'] = 'desactive';
@@ -584,6 +903,21 @@ function allowed(PDO $db, string $p, bool $write = false): bool {
 }
 function cfg(PDO $db, string $k) { $s = $db->prepare('SELECT v FROM cfg WHERE k=?'); $s->execute([$k]); return $s->fetchColumn(); }
 function setCfg(PDO $db, string $k, string $v): void { $s = $db->prepare('INSERT INTO cfg(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v'); $s->execute([$k, $v]); }
+function generatedStaffUsername(PDO $db, string $staffRole, string $name): string {
+    $prefix = $staffRole === 'formateur' ? 'F_' : 'A_';
+    $slug = strtolower(trim((string)preg_replace('/[^a-z0-9]+/', '_', nm($name)), '_'));
+    if (strpos($slug, strtolower($prefix)) === 0) $slug = substr($slug, 2);
+    if ($slug === '') $slug = $staffRole === 'formateur' ? 'formateur' : 'admin';
+    $base = $prefix . $slug;
+    $check = $db->prepare('SELECT 1 FROM staff WHERE LOWER(username)=LOWER(?)');
+    for ($i = 1; $i <= 10000; $i++) {
+        $candidate = $base . ($i === 1 ? '' : '_' . $i);
+        $check->execute([$candidate]);
+        $primaryUsername = cfg($db, 'admin_user');
+        if (!$check->fetchColumn() && ($primaryUsername === false || strcasecmp((string)$primaryUsername, $candidate) !== 0)) return $candidate;
+    }
+    return '';
+}
 function clearRecoverableCredentials(PDO $db): void {
     if ((string)cfg($db, 'credential_cipher_cleanup_v1') === '1') return;
     $db->beginTransaction();
@@ -641,13 +975,6 @@ case 'public_settings':
 case 'account_register':
     // Les comptes apprenants sont créés exclusivement par les formateurs autorisés.
     out(['ok' => false, 'msg' => 'Les comptes apprenants sont créés uniquement par les formateurs.']);
-    $first = trim(preg_replace('/\s+/u', ' ', (string)($in['first_name'] ?? ''))); $last = trim(preg_replace('/\s+/u', ' ', (string)($in['last_name'] ?? ''))); $email = strtolower(trim((string)($in['email'] ?? ''))); $phone = trim((string)($in['phone'] ?? '')); $password = (string)($in['password'] ?? ''); $confirm = (string)($in['confirm'] ?? '');
-    if ($first === '' || $last === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 180) out(['ok' => false, 'msg' => 'Vérifiez votre prénom, votre nom et votre adresse e-mail.']);
-    if (strlen($password) < 12 || !hash_equals($password, $confirm)) out(['ok' => false, 'msg' => 'Le mot de passe doit contenir au moins 12 caractères et les deux champs doivent être identiques.']);
-    $name = $first . ' ' . $last; $normalized = nm($name); $uid = substr(sha1($normalized . '|account|' . $email), 0, 16);
-    try { $s = $db->prepare('INSERT INTO learner_accounts(learner_uid,first_name,last_name,email,phone,password_hash,active,created) VALUES(?,?,?,?,?,?,1,?)'); $s->execute([$uid,$first,$last,$email,$phone,password_hash($password, PASSWORD_DEFAULT),gmdate('c')]); }
-    catch (PDOException $e) { out(['ok' => false, 'msg' => 'Cette adresse e-mail est déjà utilisée.']); }
-    session_regenerate_id(true); $_SESSION['uid'] = $uid; $_SESSION['name'] = $name; out(['ok' => true, 'name' => $name]);
 
 case 'account_login':
     out(['ok' => false, 'deprecated' => true, 'msg' => 'Utilisez la connexion centrale.']);
@@ -675,35 +1002,83 @@ case 'project_grades_get':
     if (role() === 'learner') $uid = (string)($_SESSION['uid'] ?? '');
     elseif (!canReadStaff()) out(['error'=>'forbidden']);
     if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $uid)) out(['error'=>'bad_data']);
-    $learner = $db->prepare('SELECT learner_uid,formation_id FROM learner_accounts WHERE learner_uid=? LIMIT 1'); $learner->execute([$uid]); $target = $learner->fetch(PDO::FETCH_ASSOC);
+    $learner = $db->prepare('SELECT learner_uid,formation_id,first_name,last_name,trainer_staff_id FROM learner_accounts WHERE learner_uid=? LIMIT 1'); $learner->execute([$uid]); $target = $learner->fetch(PDO::FETCH_ASSOC);
     if (!$target) out(['error'=>'not_found']);
     if (canTrainer() && !trainerOwnsLearnerUid($db,currentStaffId($db),$uid)) out(['error'=>'forbidden']);
     $project=readProjectGrades($db,$uid,(string)$target['formation_id']);
-    out(['learner_uid'=>$uid,'formation_id'=>(string)$target['formation_id']]+$project);
+    $formation=$db->prepare('SELECT name FROM formations WHERE id=?');$formation->execute([(string)$target['formation_id']]);
+    $trainerName='Non attribué';
+    if(!empty($target['trainer_staff_id'])){$trainer=$db->prepare('SELECT first_name,last_name FROM staff WHERE id=?');$trainer->execute([(int)$target['trainer_staff_id']]);$staff=$trainer->fetch(PDO::FETCH_ASSOC);if($staff){$name=trim((string)$staff['first_name'].' '.(string)$staff['last_name']);if($name!=='')$trainerName=$name;}}
+    out(['learner_uid'=>$uid,'learner_name'=>trim((string)$target['first_name'].' '.(string)$target['last_name']),'formation_id'=>(string)$target['formation_id'],'formation_name'=>(string)($formation->fetchColumn()?:''),'trainer_name'=>$trainerName,'comment_options'=>projectGradeCommentOptions()]+$project);
 
 case 'project_grades_set':
     if (!canManage()) out(['error'=>'forbidden']);
-    $uid=trim((string)($in['learner_uid']??'')); $inputScores=$in['scores']??null;
-    if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/',$uid) || !is_array($inputScores)) out(['error'=>'bad_data']);
+    $uid=trim((string)($in['learner_uid']??''));$inputDetails=$in['details']??null;$inputScores=$in['scores']??null;
+    if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/',$uid) || (!is_array($inputDetails)&&!is_array($inputScores))) out(['error'=>'bad_data']);
     $learner=$db->prepare('SELECT learner_uid,formation_id,active FROM learner_accounts WHERE learner_uid=? LIMIT 1');$learner->execute([$uid]);$target=$learner->fetch(PDO::FETCH_ASSOC);
     if(!$target)out(['error'=>'not_found']);
     if((int)$target['active']!==1)out(['error'=>'bad_data','msg'=>'Un compte désactivé ne peut pas être noté.']);
-    $formationId=(string)$target['formation_id'];$rubric=projectRubric($formationId);
-    if(!$rubric)out(['error'=>'bad_data','msg'=>'Formation non prise en charge pour la saisie des projets.']);
+    $formationId=(string)$target['formation_id'];$definitions=projectRubricDetails($formationId);
+    if(!$definitions)out(['error'=>'bad_data','msg'=>'Formation non prise en charge pour la saisie des projets.']);
     if(canTrainer()&&!trainerOwnsLearnerUid($db,currentStaffId($db),$uid))out(['error'=>'forbidden']);
-    foreach($inputScores as $key=>$value){
-        if(!is_string($key)||!array_key_exists($key,$rubric))out(['error'=>'bad_data','msg'=>'Rubrique de note inconnue.']);
-        if($value===null||$value==='')continue;
-        if(!is_numeric($value)||(float)$value<0||(float)$value>20)out(['error'=>'bad_data','msg'=>'Chaque note doit être comprise entre 0 et 20.']);
+    $old=readProjectGrades($db,$uid,$formationId);$details=$old['details'];$legacyScores=$old['legacy_scores'];$evaluations=$old['evaluations'];$now=gmdate('c');$evaluator=currentStaffDisplayName($db);
+    if(is_array($inputDetails)){
+        $allowedComments=projectGradeCommentOptions();
+        foreach($inputDetails as $key=>$incoming){
+            if(!is_string($key)||!array_key_exists($key,$definitions)||!is_array($incoming))out(['error'=>'bad_data','msg'=>'Critère de grille inconnu.']);
+            $definition=$definitions[$key];$incomingScores=$incoming['scores']??[];$incomingComments=$incoming['comments']??[];
+            if(!is_array($incomingScores)||!is_array($incomingComments))out(['error'=>'bad_data','msg'=>'Données de grille invalides.']);
+            foreach(array_keys($incomingScores) as $itemKey)if(!array_key_exists($itemKey,$definition['items']))out(['error'=>'bad_data','msg'=>'Sous-critère de grille inconnu.']);
+            foreach(array_keys($incomingComments) as $itemKey)if(!array_key_exists($itemKey,$definition['items']))out(['error'=>'bad_data','msg'=>'Sous-critère de commentaire inconnu.']);
+            $previous=$details[$key]??['scores'=>[],'comments'=>[]];$scoresByItem=[];$commentsByItem=[];
+            foreach($definition['items'] as $itemKey=>$item){
+                $value=array_key_exists($itemKey,$incomingScores)?$incomingScores[$itemKey]:($previous['scores'][$itemKey]??null);
+                if($value!==null&&$value!==''){
+                    if(!is_numeric($value)||!is_finite((float)$value)||(float)$value<0||(float)$value>(float)$item['max'])out(['error'=>'bad_data','msg'=>'Chaque note doit respecter le maximum indiqué pour son sous-critère.']);
+                    $value=round((float)$value,2);
+                }else $value=null;
+                $comment=array_key_exists($itemKey,$incomingComments)?$incomingComments[$itemKey]:($previous['comments'][$itemKey]??'');
+                if($comment!==null&&$comment!==''&&!in_array($comment,$allowedComments,true))out(['error'=>'bad_data','msg'=>'Commentaire-type invalide.']);
+                $scoresByItem[$itemKey]=$value;$commentsByItem[$itemKey]=$comment?:'';
+            }
+            $details[$key]=['scores'=>$scoresByItem,'comments'=>$commentsByItem];
+            if(serialize($previous)!==serialize($details[$key]))$evaluations[$key]=['evaluated_at'=>$now,'evaluator'=>$evaluator];
+            $criterionComplete=true;
+            foreach($scoresByItem as $value)if($value===null){$criterionComplete=false;break;}
+            if($criterionComplete)unset($legacyScores[$key]);
+        }
+    }else{
+        foreach($inputScores as $key=>$value){
+            if(!is_string($key)||!array_key_exists($key,$definitions))out(['error'=>'bad_data','msg'=>'Critère de grille inconnu.']);
+            if($value===null||$value===''){$legacyScores[$key]=null;continue;}
+            if(!is_numeric($value)||!is_finite((float)$value)||(float)$value<0||(float)$value>20)out(['error'=>'bad_data','msg'=>'Chaque ancienne note doit être comprise entre 0 et 20.']);
+            $legacyScores[$key]=round((float)$value,2);
+        }
     }
-    $old=readProjectGrades($db,$uid,$formationId);$scores=$old['scores'];
-    foreach($inputScores as $key=>$value)$scores[$key]=($value===null||$value==='')?null:round((float)$value,2);
-    $data=json_encode(['formation_id'=>$formationId,'scores'=>$scores],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+    $data=json_encode(['version'=>2,'formation_id'=>$formationId,'legacy_scores'=>$legacyScores,'details'=>$details,'evaluations'=>$evaluations],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
     $db->beginTransaction();
-    try{$save=$db->prepare('INSERT INTO kv(path,data,updated) VALUES(?,?,?) ON CONFLICT(path) DO UPDATE SET data=excluded.data,updated=excluded.updated');$save->execute(['project_grades/'.$uid,$data,gmdate('c')]);auditLog($db,'project_grades_update','learner',$uid,['before'=>$old['scores'],'after'=>$scores]);$db->commit();}
+    try{$save=$db->prepare('INSERT INTO kv(path,data,updated) VALUES(?,?,?) ON CONFLICT(path) DO UPDATE SET data=excluded.data,updated=excluded.updated');$save->execute(['project_grades/'.$uid,$data,$now]);auditLog($db,'project_grades_update','learner',$uid,['before'=>$old['scores'],'after'=>$details]);$db->commit();}
     catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     $project=readProjectGrades($db,$uid,$formationId);$test=calculateTestGrade($db,$uid,$formationId);
-    out(['ok'=>true,'learner_uid'=>$uid,'formation_id'=>$formationId]+$project+['tests_total'=>$test['tests_total'],'final_average'=>$test['final_average'],'mention'=>$test['mention']]);
+    out(['ok'=>true,'learner_uid'=>$uid,'formation_id'=>$formationId]+$project+['tests_total'=>$test['tests_total'],'final_average'=>$test['final_average'],'final_average_status'=>$test['final_average_status'],'mention'=>$test['mention']]);
+
+case 'project_grade_weights_set':
+    if(!canManage())out(['error'=>'forbidden']);
+    $formationId=trim((string)($in['formation_id']??''));$inputWeights=$in['weights']??null;$rubric=projectRubricDetails($formationId);
+    if(!$rubric||!is_array($inputWeights))out(['error'=>'bad_data','msg'=>'Formation ou pondérations invalides.']);
+    if(canTrainer()&&!trainerCanFormation($db,currentStaffId($db),$formationId))out(['error'=>'forbidden']);
+    $weights=[];
+    foreach($rubric as $key=>$definition){
+        $weight=$inputWeights[$key]??null;
+        if(!is_numeric($weight)||!is_finite((float)$weight)||(float)$weight<0.1||(float)$weight>10)out(['error'=>'bad_data','msg'=>'Chaque poids doit être compris entre 0,1 et 10.']);
+        $weights[$key]=round((float)$weight,2);
+    }
+    foreach(array_keys($inputWeights) as $key)if(!array_key_exists($key,$rubric))out(['error'=>'bad_data','msg'=>'Critère de pondération inconnu.']);
+    $before=readProjectGradeWeights($db,$formationId);$now=gmdate('c');$data=json_encode($weights,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+    $db->beginTransaction();
+    try{$save=$db->prepare('INSERT INTO kv(path,data,updated) VALUES(?,?,?) ON CONFLICT(path) DO UPDATE SET data=excluded.data,updated=excluded.updated');$save->execute(['project_grade_weights/'.$formationId,$data,$now]);auditLog($db,'project_grade_weights_update','formation',$formationId,['before'=>$before,'after'=>$weights]);$db->commit();}
+    catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    out(['ok'=>true,'formation_id'=>$formationId,'weights'=>$weights]);
 
 case 'formations_list':
     if (role() === 'learner') {
@@ -749,28 +1124,49 @@ case 'test_levels_list':
     if ($formationId !== '') { $sql.=' AND l.formation_id=?'; $params[]=$formationId; }
     if ($moduleId !== '') { $sql.=' AND l.module_id=?'; $params[]=$moduleId; }
     if (role()==='learner') { $own=(string)($_SESSION['formation_id'] ?? ''); if ($own==='') out(['levels'=>[]]); $formationId=$own; $sql='SELECT l.*,m.name AS module_name,m.duration_minutes,m.question_count FROM test_levels l JOIN modules m ON m.id=l.module_id WHERE l.active=1 AND l.formation_id=?'; $params=[$own]; if($moduleId!==''){$sql.=' AND l.module_id=?';$params[]=$moduleId;} }
+    if(canTrainer()&&$formationId!==''&&!trainerCanFormation($db,currentStaffId($db),$formationId))out(['error'=>'forbidden']);
     if (canTrainer()) { $staffId=currentStaffId($db); $sql.=' AND EXISTS (SELECT 1 FROM staff_formations sf WHERE sf.staff_id=? AND sf.formation_id=l.formation_id)'; $params[]=$staffId; }
     $sql.=' ORDER BY l.formation_id,l.position,l.name'; $s=$db->prepare($sql); $s->execute($params); $levels=$s->fetchAll(PDO::FETCH_ASSOC);
     $uid=(string)($_SESSION['uid'] ?? ''); $levelsOut=[];
     foreach($levels as $level) {
         $progress=['attempts_used'=>0,'extra_attempts'=>0,'attempts_allowed'=>(int)$level['attempts_allowed'],'best_percentage'=>-1,'validated'=>0,'validated_at'=>null];
-        if($uid!==''){$p=$db->prepare('SELECT * FROM level_progress WHERE learner_uid=? AND level_id=?');$p->execute([$uid,$level['id']]);$found=$p->fetch(PDO::FETCH_ASSOC);if($found){foreach(['attempts_used','extra_attempts','attempts_allowed','best_percentage','validated','manual_unlock'] as $numField)if(isset($found[$numField]))$found[$numField]=(int)$found[$numField];$progress=$found;}}
+        if($uid!==''){$p=$db->prepare('SELECT * FROM level_progress WHERE learner_uid=? AND level_id=?');$p->execute([$uid,$level['id']]);$found=$p->fetch(PDO::FETCH_ASSOC);if($found){foreach(['attempts_used','extra_attempts','attempts_allowed','best_percentage','validated','manual_unlock'] as $numField)if(isset($found[$numField]))$found[$numField]=(int)$found[$numField];$progress=$found;}$progress=refreshLevelAttemptCycle($db,$uid,$level,$progress);}
         $progress['official_validated']=levelIsOfficiallyValidated($progress,(int)$level['pass_percent']);$progress['validated']=$progress['official_validated']?1:0;
-        $exam=activeExam($db,(string)$level['id']);
-        $levelsOut[]=array_merge($level,['progress'=>$progress,'exam'=>$exam]);
+        $levelsOut[]=array_merge($level,['progress'=>$progress]);
     }
-    out(['levels'=>$levelsOut]);
+    $exam=null;
+    if($formationId!==''){
+        $exam=activeExam($db,$formationId);
+        $exam['formation_id']=$formationId;
+        $durationQuery=$db->prepare('SELECT m.duration_minutes FROM test_levels l JOIN modules m ON m.id=l.module_id WHERE l.formation_id=? AND l.active=1 ORDER BY l.position,l.id LIMIT 1');
+        $durationQuery->execute([$formationId]);$exam['duration_minutes']=(int)($durationQuery->fetchColumn()?:0);
+        $questionCount=$db->prepare('SELECT COUNT(*) FROM questions q JOIN test_levels l ON l.id=q.level_id WHERE l.formation_id=? AND l.active=1 AND q.active=1');
+        $questionCount->execute([$formationId]);$exam['question_count']=min(QUESTIONS_PER_ATTEMPT,(int)$questionCount->fetchColumn());
+        if($uid!==''){
+            $usage=$db->prepare('SELECT COUNT(*) FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen" AND status IN ("started","submitted","expired")');
+            $usage->execute([$uid,$formationId]);$exam['attempts_used']=(int)$usage->fetchColumn();
+            $exam['attempts_remaining']=max(0,(int)($exam['attempts_allowed']??0)-(int)$exam['attempts_used']);
+            $activeAttempt=$db->prepare('SELECT id FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen" AND status="started" ORDER BY started_at DESC LIMIT 1');
+            $activeAttempt->execute([$uid,$formationId]);$exam['active_attempt_id']=$activeAttempt->fetchColumn()?:null;
+        }
+    }
+    out(['levels'=>$levelsOut,'exam'=>$exam]);
 
 case 'test_attempt_start':
     if(role()!== 'learner') out(['error'=>'forbidden']);
-    $levelId=trim((string)($in['level_id'] ?? '')); $mode=trim((string)($in['mode'] ?? ''));
+    $requestedLevelId=trim((string)($in['level_id'] ?? '')); $mode=trim((string)($in['mode'] ?? ''));
     if(!in_array($mode,['parcours','entrainement','examen'],true)) out(['error'=>'bad_data']);
-    $l=$db->prepare('SELECT * FROM test_levels WHERE id=? AND active=1');$l->execute([$levelId]);$level=$l->fetch(PDO::FETCH_ASSOC);
-    if(!$level) out(['error'=>'not_found']);
     $formationId=(string)($_SESSION['formation_id'] ?? '');
     if ($formationId === '') out(['error'=>'formation_unavailable','msg'=>'Aucune formation active n’est associée à ce compte.']);
     $learnerFormation=$db->prepare('SELECT 1 FROM formations WHERE id=? AND active=1 LIMIT 1');$learnerFormation->execute([$formationId]);
     if (!$learnerFormation->fetchColumn()) out(['error'=>'formation_unavailable','msg'=>'La formation associée à ce compte n’est plus active.']);
+    if($mode==='examen'){
+        $l=$db->prepare('SELECT * FROM test_levels WHERE formation_id=? AND active=1 ORDER BY position,id LIMIT 1');$l->execute([$formationId]);
+    }else{
+        $l=$db->prepare('SELECT * FROM test_levels WHERE id=? AND active=1');$l->execute([$requestedLevelId]);
+    }
+    $level=$l->fetch(PDO::FETCH_ASSOC);if(!$level)out(['error'=>'not_found']);
+    $levelId=(string)$level['id'];
     if(!hash_equals($formationId,(string)$level['formation_id']))out(['error'=>'forbidden']);
     if($mode==='parcours') {
         $previous=$db->prepare('SELECT l.id,l.pass_percent FROM test_levels l WHERE l.formation_id=? AND l.active=1 AND l.position<? ORDER BY l.position ASC');
@@ -785,21 +1181,30 @@ case 'test_attempt_start':
     }
     $uid=(string)$_SESSION['uid'];
     $db->exec('BEGIN IMMEDIATE');
-    $resume=$db->prepare('SELECT * FROM test_attempts WHERE learner_uid=? AND level_id=? AND mode=? AND status="started" ORDER BY started_at DESC LIMIT 1');$resume->execute([$uid,$levelId,$mode]);$attempt=$resume->fetch(PDO::FETCH_ASSOC);
+    if($mode==='examen'){$resume=$db->prepare('SELECT * FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode=? AND status="started" ORDER BY started_at DESC LIMIT 1');$resume->execute([$uid,$formationId,$mode]);}
+    else{$resume=$db->prepare('SELECT * FROM test_attempts WHERE learner_uid=? AND level_id=? AND mode=? AND status="started" ORDER BY started_at DESC LIMIT 1');$resume->execute([$uid,$levelId,$mode]);}
+    $attempt=$resume->fetch(PDO::FETCH_ASSOC);
     if($attempt){ $expires=strtotime((string)$attempt['expires_at']); if($expires&&$expires<time()){ $up=$db->prepare('UPDATE test_attempts SET status="expired" WHERE id=?');$up->execute([$attempt['id']]); $attempt=null; } }
     if(!$attempt){
         // La fermeture empêche de démarrer un nouvel examen, mais ne doit pas interrompre
         // une tentative encore en cours que l’apprenant reprend après une actualisation.
         if($mode==='examen') {
-            $exam=activeExam($db,$levelId); if(!(bool)$exam['_active_for_new'])out(['error'=>'exam_unavailable','msg'=>'Cet examen n’est pas ouvert en ce moment.']);
+            $exam=activeExam($db,$formationId); if(!(bool)$exam['_active_for_new'])out(['error'=>'exam_unavailable','msg'=>'Cet examen n’est pas ouvert en ce moment.']);
         }
-        $progress=ensureProgress($db,$uid,$levelId,(string)$level['module_id'],(string)$level['formation_id']); $used=0;$allowed=($mode==='entrainement')?PHP_INT_MAX:(int)($progress['attempts_allowed']+(int)$progress['extra_attempts']);
-        if($mode==='examen'){ $ec=$db->prepare('SELECT attempts_allowed FROM exam_configs WHERE level_id=? LIMIT 1');$ec->execute([$levelId]);$examAllowed=$ec->fetchColumn();if($examAllowed!==false)$allowed=(int)$examAllowed; $count=$db->prepare('SELECT COUNT(*) FROM test_attempts WHERE learner_uid=? AND level_id=? AND mode="examen" AND status IN ("started","submitted","expired")');$count->execute([$uid,$levelId]);$used=(int)$count->fetchColumn(); }
+        $progress=$mode==='examen'?null:ensureProgress($db,$uid,$levelId,(string)$level['module_id'],(string)$level['formation_id']);
+        if($mode==='parcours'){
+            $progress=refreshLevelAttemptCycle($db,$uid,$level,$progress);
+            if((int)($progress['cooldown_remaining_seconds']??0)>0){$db->exec('COMMIT');out(['error'=>'attempts_cooldown','msg'=>'Vous avez épuisé vos tentatives. Entraînez-vous davantage et revenez après le délai ; trois tentatives seront automatiquement rétablies.','cooldown_until'=>$progress['cooldown_until'],'remaining_seconds'=>(int)$progress['cooldown_remaining_seconds']]);}
+        }
+        $used=0;$allowed=$mode==='entrainement'?PHP_INT_MAX:($mode==='examen'?(int)($exam['attempts_allowed']??1):(int)($progress['attempts_allowed']+(int)$progress['extra_attempts']));
+        if($mode==='examen'){ $allowed=(int)($exam['attempts_allowed']??1);$count=$db->prepare('SELECT COUNT(*) FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen" AND status IN ("started","submitted","expired")');$count->execute([$uid,$formationId]);$used=(int)$count->fetchColumn(); }
         elseif($mode==='parcours') { $used=(int)$progress['attempts_used']; }
-        if($mode!=='entrainement'&&$used>= $allowed)out(['error'=>'attempts_exhausted','msg'=>'Le nombre de tentatives est épuisé. Demandez une tentative supplémentaire au formateur.']);
+        if($mode!=='entrainement'&&$used>= $allowed)out(['error'=>'attempts_exhausted','msg'=>$mode==='examen'?'Le nombre de tentatives autorisées pour cet examen est épuisé. Contactez votre formateur.':'Vous avez épuisé vos tentatives. Entraînez-vous davantage et revenez après le délai ; trois tentatives seront automatiquement rétablies.']);
         $duration=$db->prepare('SELECT duration_minutes FROM modules WHERE id=?');$duration->execute([$level['module_id']]);$minutes=max(0,(int)$duration->fetchColumn());
         $started=time();$expires=$minutes>0?gmdate('c',$started+$minutes*60):null;$attemptNo=$mode==='entrainement'?1:$used+1;
-        $snapshot=levelSnapshot($db,(string)$level['module_id'],$levelId);if(!$snapshot)out(['error'=>'no_questions','msg'=>'Aucune question active n’est disponible pour ce niveau. Contactez votre formateur.']);$attemptId=bin2hex(random_bytes(16));
+        if($mode==='parcours'){$lastNumber=$db->prepare('SELECT COALESCE(MAX(attempt_number),0) FROM test_attempts WHERE learner_uid=? AND level_id=? AND mode="parcours"');$lastNumber->execute([$uid,$levelId]);$attemptNo=(int)$lastNumber->fetchColumn()+1;}
+        if($mode==='examen'){$lastNumber=$db->prepare('SELECT COALESCE(MAX(attempt_number),0) FROM test_attempts WHERE learner_uid=? AND formation_id=? AND mode="examen"');$lastNumber->execute([$uid,$formationId]);$attemptNo=(int)$lastNumber->fetchColumn()+1;}
+        $snapshot=$mode==='examen'?formationExamSnapshot($db,$formationId):levelSnapshot($db,(string)$level['module_id'],$levelId);if(!$snapshot)out(['error'=>'no_questions','msg'=>$mode==='examen'?'Aucune question active n’est disponible pour cette formation. Contactez votre formateur.':'Aucune question active n’est disponible pour ce niveau. Contactez votre formateur.']);$attemptId=bin2hex(random_bytes(16));
         $ins=$db->prepare('INSERT INTO test_attempts(id,learner_uid,formation_id,module_id,level_id,mode,attempt_number,status,started_at,expires_at,snapshot,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');$ins->execute([$attemptId,$uid,(string)$level['formation_id'],(string)$level['module_id'],$levelId,$mode,$attemptNo,'started',gmdate('c',$started),$expires,json_encode($snapshot,JSON_UNESCAPED_UNICODE),gmdate('c',$started)]);
         if($mode==='parcours'){$up=$db->prepare('UPDATE level_progress SET attempts_used=attempts_used+1,updated_at=? WHERE learner_uid=? AND level_id=?');$up->execute([gmdate('c'),$uid,$levelId]);}
         $attempt=['id'=>$attemptId,'learner_uid'=>$uid,'formation_id'=>$level['formation_id'],'module_id'=>$level['module_id'],'level_id'=>$levelId,'mode'=>$mode,'attempt_number'=>$attemptNo,'status'=>'started','started_at'=>gmdate('c',$started),'expires_at'=>$expires,'snapshot'=>json_encode($snapshot,JSON_UNESCAPED_UNICODE)];
@@ -833,7 +1238,7 @@ case 'test_attempt_submit':
     $attemptId=trim((string)($in['attempt_id'] ?? ''));$submissionId=trim((string)($in['submission_id'] ?? ''));
     if(!preg_match('#^[a-f0-9]{32}$#',$attemptId)||!preg_match('#^[A-Za-z0-9_-]{8,64}$#',$submissionId))out(['error'=>'bad_data']);
     $a=$db->prepare('SELECT * FROM test_attempts WHERE id=? AND learner_uid=? LIMIT 1');$a->execute([$attemptId,(string)$_SESSION['uid']]);$attempt=$a->fetch(PDO::FETCH_ASSOC);if(!$attempt)out(['error'=>'not_found']);
-    if($attempt['status']==='submitted'){$level=$db->prepare('SELECT pass_percent FROM test_levels WHERE id=?');$level->execute([(string)$attempt['level_id']]);$threshold=$level->fetchColumn();$threshold=$threshold===false?90:(int)$threshold;$passed=(int)$attempt['total']>0&&(int)$attempt['score']*100>=$threshold*(int)$attempt['total'];out(['ok'=>true,'duplicate'=>true,'percentage'=>(int)$attempt['percentage'],'score'=>(int)$attempt['score'],'total'=>(int)$attempt['total'],'threshold'=>$threshold,'passed'=>$passed]);}
+    if($attempt['status']==='submitted'){if($attempt['mode']==='examen'){$level=$db->prepare('SELECT pass_percent FROM formation_exam_configs WHERE formation_id=?');$level->execute([(string)$attempt['formation_id']]);}else{$level=$db->prepare('SELECT pass_percent FROM test_levels WHERE id=?');$level->execute([(string)$attempt['level_id']]);}$threshold=$level->fetchColumn();$threshold=$threshold===false?90:(int)$threshold;$passed=(int)$attempt['total']>0&&(int)$attempt['score']*100>=$threshold*(int)$attempt['total'];out(['ok'=>true,'duplicate'=>true,'percentage'=>(int)$attempt['percentage'],'score'=>(int)$attempt['score'],'total'=>(int)$attempt['total'],'threshold'=>$threshold,'passed'=>$passed]);}
     if(!in_array($attempt['status'],['started','expired'],true))out(['error'=>'attempt_unavailable']);
     $snapshot=json_decode((string)$attempt['snapshot'],true);if(!is_array($snapshot))$snapshot=[];
     $saved=$db->prepare('SELECT question_id,answer_id,multiple_answer_ids FROM test_attempt_answers WHERE attempt_id=?');
@@ -854,22 +1259,30 @@ case 'test_attempt_submit':
         $corrections[]=['question'=>$question['question'],'chosen'=>$chosenLabels,'correct'=>$correctLabels,'correct_result'=>$isCorrect,'explanation'=>(string)$question['explanation'],'points'=>$isCorrect?$points:0];
     }
     $percentage=$total>0?(int)round(100*$score/$total):0;$duration=max(0,min(86400,time()-(int)strtotime((string)$attempt['started_at'])));$name=(string)($_SESSION['name']??'Apprenant');$now=gmdate('c');
-    $level=$db->prepare('SELECT pass_percent FROM test_levels WHERE id=?');$level->execute([(string)$attempt['level_id']]);$threshold=$level->fetchColumn();$threshold=$threshold===false?90:(int)$threshold;
+    if($attempt['mode']==='examen'){$level=$db->prepare('SELECT pass_percent FROM formation_exam_configs WHERE formation_id=?');$level->execute([(string)$attempt['formation_id']]);}else{$level=$db->prepare('SELECT pass_percent FROM test_levels WHERE id=?');$level->execute([(string)$attempt['level_id']]);}$threshold=$level->fetchColumn();$threshold=$threshold===false?90:(int)$threshold;
     $passed=$total>0&&$score*100>=$threshold*$total;
     try{
         $db->beginTransaction();
         $u=$db->prepare('UPDATE test_attempts SET status="submitted",submitted_at=?,score=?,total=?,percentage=?,duration_seconds=?,submission_id=? WHERE id=? AND status IN ("started","expired")');$u->execute([$now,$score,$total,$percentage,$duration,$submissionId,$attemptId]);
         if($u->rowCount()<1){$db->rollBack();out(['ok'=>false,'duplicate'=>true,'msg'=>'Cette tentative a déjà été soumise.']);}
+        $cooldownUntil=null;
         if($attempt['mode']==='parcours'&&$passed){$p=$db->prepare('UPDATE level_progress SET best_percentage=CASE WHEN best_percentage<0 OR best_percentage<? THEN ? ELSE best_percentage END,validated=1,validated_at=COALESCE(validated_at,?),updated_at=? WHERE learner_uid=? AND level_id=?');$p->execute([$percentage,$percentage,$now,$now,(string)$attempt['learner_uid'],(string)$attempt['level_id']]);}
-        elseif($attempt['mode']==='parcours'){$p=$db->prepare('UPDATE level_progress SET best_percentage=CASE WHEN best_percentage<0 OR best_percentage<? THEN ? ELSE best_percentage END,updated_at=? WHERE learner_uid=? AND level_id=?');$p->execute([$percentage,$percentage,$now,(string)$attempt['learner_uid'],(string)$attempt['level_id']]);}
+        elseif($attempt['mode']==='parcours'){
+            $p=$db->prepare('UPDATE level_progress SET best_percentage=CASE WHEN best_percentage<0 OR best_percentage<? THEN ? ELSE best_percentage END,updated_at=? WHERE learner_uid=? AND level_id=?');$p->execute([$percentage,$percentage,$now,(string)$attempt['learner_uid'],(string)$attempt['level_id']]);
+            $progressQuery=$db->prepare('SELECT attempts_used,attempts_allowed,extra_attempts FROM level_progress WHERE learner_uid=? AND level_id=?');$progressQuery->execute([(string)$attempt['learner_uid'],(string)$attempt['level_id']]);$progress=$progressQuery->fetch(PDO::FETCH_ASSOC);
+            if($progress&&(int)$progress['attempts_used']>=(int)$progress['attempts_allowed']+(int)$progress['extra_attempts']){
+                $cooldownUntil=gmdate('c',time()+LEVEL_ATTEMPT_COOLDOWN_SECONDS);
+                $db->prepare('UPDATE level_progress SET cooldown_until=? WHERE learner_uid=? AND level_id=?')->execute([$cooldownUntil,(string)$attempt['learner_uid'],(string)$attempt['level_id']]);
+            }
+        }
         $evalId=bin2hex(random_bytes(12));$ev=$db->prepare('INSERT INTO evaluations(id,formation_id,module_id,learner_uid,learner_name,mode,score,total,percentage,duration_seconds,submission_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');$ev->execute([$evalId,(string)$attempt['formation_id'],(string)$attempt['module_id'],(string)$attempt['learner_uid'],$name,(string)$attempt['mode'],$score,$total,$percentage,$duration,$submissionId,$now]);
         $db->commit();
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
-    $publish=false;if($attempt['mode']==='entrainement')$publish=true;if($attempt['mode']==='parcours')$publish=true;if($attempt['mode']==='examen'){ $exam=$db->prepare('SELECT correction_published,correction_mode,correction_at FROM exam_configs WHERE level_id=?');$exam->execute([(string)$attempt['level_id']]);$examRow=$exam->fetch(PDO::FETCH_ASSOC);if($examRow){if((int)$examRow['correction_published']===1)$publish=true;if($examRow['correction_mode']==='immediate')$publish=true;if($examRow['correction_mode']==='programme'&&$examRow['correction_at']&&strtotime((string)$examRow['correction_at'])<=time())$publish=true;}}
+    $publish=false;if($attempt['mode']==='entrainement')$publish=true;if($attempt['mode']==='parcours')$publish=true;if($attempt['mode']==='examen'){ $exam=$db->prepare('SELECT correction_published,correction_mode,correction_at FROM formation_exam_configs WHERE formation_id=?');$exam->execute([(string)$attempt['formation_id']]);$examRow=$exam->fetch(PDO::FETCH_ASSOC);if($examRow){if((int)$examRow['correction_published']===1)$publish=true;if($examRow['correction_mode']==='immediate')$publish=true;if($examRow['correction_mode']==='programme'&&$examRow['correction_at']&&strtotime((string)$examRow['correction_at'])<=time())$publish=true;}}
     // Parcours : après un échec, on indique quelles questions sont fausses, sans révéler les bonnes réponses (nouvelle tentative possible).
     $correctionsOut=$corrections;
     if($attempt['mode']==='parcours'&&!$passed){foreach($correctionsOut as &$c){$c['correct']=[];$c['explanation']='';}unset($c);}
-    out(['ok'=>true,'attempt_id'=>$attemptId,'score'=>$score,'total'=>$total,'percentage'=>$percentage,'good'=>$good,'bad'=>$bad,'threshold'=>$threshold,'passed'=>$passed,'corrections'=>$publish?$correctionsOut:[],'correction_published'=>$publish]);
+    out(['ok'=>true,'attempt_id'=>$attemptId,'score'=>$score,'total'=>$total,'percentage'=>$percentage,'good'=>$good,'bad'=>$bad,'threshold'=>$threshold,'passed'=>$passed,'cooldown_until'=>$cooldownUntil,'corrections'=>$publish?$correctionsOut:[],'correction_published'=>$publish]);
 
 case 'test_attempt_resume':
     if(role()!== 'learner')out(['error'=>'forbidden']);
@@ -885,8 +1298,8 @@ case 'test_attempt_corrections':
     $attemptQuery = $db->prepare('SELECT * FROM test_attempts WHERE id=? AND learner_uid=? AND status="submitted" AND mode="examen" LIMIT 1');
     $attemptQuery->execute([$attemptId, (string)$_SESSION['uid']]); $attempt = $attemptQuery->fetch(PDO::FETCH_ASSOC);
     if (!$attempt) out(['error' => 'not_found']);
-    $examQuery = $db->prepare('SELECT correction_published,correction_mode,correction_at FROM exam_configs WHERE level_id=?');
-    $examQuery->execute([(string)$attempt['level_id']]); $exam = $examQuery->fetch(PDO::FETCH_ASSOC);
+    $examQuery = $db->prepare('SELECT correction_published,correction_mode,correction_at FROM formation_exam_configs WHERE formation_id=?');
+    $examQuery->execute([(string)$attempt['formation_id']]); $exam = $examQuery->fetch(PDO::FETCH_ASSOC);
     $published = $exam && ((int)$exam['correction_published'] === 1 || $exam['correction_mode'] === 'immediate' || ($exam['correction_mode'] === 'programme' && $exam['correction_at'] && strtotime((string)$exam['correction_at']) <= time()));
     if (!$published) out(['ok' => false, 'msg' => 'Le corrigé de cet examen n’est pas encore publié.']);
     $snapshot = json_decode((string)$attempt['snapshot'], true); if (!is_array($snapshot)) $snapshot = [];
@@ -909,15 +1322,19 @@ case 'test_attempt_corrections':
     out(['ok' => true, 'attempt_id' => $attemptId, 'corrections' => $corrections]);
 
 case 'test_attempt_history':
-    if(role()!== 'learner')out(['error'=>'forbidden']);$uid=(string)$_SESSION['uid'];$mode=trim((string)($in['mode']??''));$sql='SELECT ta.id,ta.formation_id,f.name formation_name,ta.module_id,m.name module_name,ta.level_id,l.name level_name,ta.mode,ta.attempt_number,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds FROM test_attempts ta LEFT JOIN formations f ON f.id=ta.formation_id LEFT JOIN modules m ON m.id=ta.module_id LEFT JOIN test_levels l ON l.id=ta.level_id WHERE ta.learner_uid=?';$params=[$uid];if(in_array($mode,['parcours','entrainement','examen'],true)){$sql.=' AND ta.mode=?';$params[]=$mode;}$sql.=' ORDER BY ta.started_at DESC LIMIT 200';$s=$db->prepare($sql);$s->execute($params);out(['attempts'=>$s->fetchAll(PDO::FETCH_ASSOC)]);
+    if(role()!== 'learner')out(['error'=>'forbidden']);$uid=(string)$_SESSION['uid'];$mode=trim((string)($in['mode']??''));$sql='SELECT ta.id,ta.formation_id,f.name formation_name,ta.module_id,m.name module_name,ta.level_id,CASE WHEN ta.mode="examen" THEN "Examen général" ELSE l.name END level_name,ta.mode,ta.attempt_number,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds FROM test_attempts ta LEFT JOIN formations f ON f.id=ta.formation_id LEFT JOIN modules m ON m.id=ta.module_id LEFT JOIN test_levels l ON l.id=ta.level_id WHERE ta.learner_uid=?';$params=[$uid];if(in_array($mode,['parcours','entrainement','examen'],true)){$sql.=' AND ta.mode=?';$params[]=$mode;}$sql.=' ORDER BY ta.started_at DESC LIMIT 200';$s=$db->prepare($sql);$s->execute($params);out(['attempts'=>$s->fetchAll(PDO::FETCH_ASSOC)]);
 
 case 'trainer_levels_list':
     if (!canReadStaff()) out(['error' => 'forbidden']);
-    $sql = 'SELECT l.id,l.formation_id,f.name formation_name,l.module_id,l.name,l.position,l.attempts_allowed,l.pass_percent,(SELECT COUNT(*) FROM questions q WHERE q.level_id=l.id AND q.active=1) own_questions,e.active exam_active,e.state exam_state,e.starts_at,e.closes_at,e.attempts_allowed exam_attempts,e.correction_mode,e.correction_published FROM test_levels l JOIN formations f ON f.id=l.formation_id LEFT JOIN exam_configs e ON e.level_id=l.id WHERE l.active=1';
+    $sql = 'SELECT l.id,l.formation_id,f.name formation_name,l.module_id,l.name,l.position,l.attempts_allowed,l.pass_percent,(SELECT COUNT(*) FROM questions q WHERE q.level_id=l.id AND q.active=1) own_questions FROM test_levels l JOIN formations f ON f.id=l.formation_id WHERE l.active=1';
     $params = [];
     if (canTrainer()) { $sql .= ' AND l.formation_id IN (SELECT formation_id FROM staff_formations WHERE staff_id=?)'; $params[] = currentStaffId($db); }
     $s = $db->prepare($sql . ' ORDER BY l.formation_id,l.position'); $s->execute($params);
-    out(['levels' => $s->fetchAll(PDO::FETCH_ASSOC)]);
+    $formationSql='SELECT f.id,f.name,e.active exam_active,e.state exam_state,e.starts_at,e.closes_at,e.attempts_allowed exam_attempts,e.pass_percent exam_pass_percent,e.correction_mode,e.correction_published FROM formations f LEFT JOIN formation_exam_configs e ON e.formation_id=f.id WHERE f.active=1';
+    $formationParams=[];
+    if(canTrainer()){$formationSql.=' AND f.id IN (SELECT formation_id FROM staff_formations WHERE staff_id=?)';$formationParams[]=currentStaffId($db);}
+    $formationQuery=$db->prepare($formationSql.' ORDER BY f.position,f.name');$formationQuery->execute($formationParams);
+    out(['levels' => $s->fetchAll(PDO::FETCH_ASSOC),'formations'=>$formationQuery->fetchAll(PDO::FETCH_ASSOC)]);
 
 case 'trainer_actions_list':
     if (!canReadStaff()) out(['error' => 'forbidden']);
@@ -954,25 +1371,30 @@ case 'test_trainer_results':
             auditLog($db,'attempts_limit_update','level',$levelId,['before'=>$previous===false?null:(int)$previous,'after'=>(int)$allowed]);
             out(['ok'=>true]);
         }
-        $levelId=trim((string)($in['level_id']??''));$formationId=trim((string)($in['formation_id']??''));$moduleId=trim((string)($in['module_id']??''));$active=(int)($in['active']??0)===1?1:0;$starts=trim((string)($in['starts_at']??''));$closes=trim((string)($in['closes_at']??''));$allowed=filter_var($in['attempts_allowed']??1,FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>100]]);$correctionMode=trim((string)($in['correction_mode']??'manuel'));$correctionAt=trim((string)($in['correction_at']??''));
-        if(!preg_match('#^[a-zA-Z0-9_-]+$#',$levelId)||!preg_match('#^[a-zA-Z0-9_-]+$#',$moduleId)||!preg_match('#^[a-zA-Z0-9_-]+$#',$formationId)||$allowed===false||!in_array($correctionMode,['immediate','programme','manuel'],true))out(['error'=>'bad_data']);
-        $start=$starts!==''?gmdate('c',strtotime($starts)):null;$close=$closes!==''?gmdate('c',strtotime($closes)):null;$correctionDate=$correctionAt!==''?gmdate('c',strtotime($correctionAt)):null;if($start&&$close&&strtotime($close)<=strtotime($start))out(['error'=>'bad_period']);
-        $id=hash('sha256',$levelId);$state=$active?($start&&strtotime($start)>time()?'programme':'actif'):'desactive';$by=(string)($_SESSION['uid']??$_SESSION['admin_name']??'');$now=gmdate('c');
-        $existing=$db->prepare('SELECT active,state,starts_at,closes_at,attempts_allowed,correction_mode,correction_at FROM exam_configs WHERE level_id=?');$existing->execute([$levelId]);$previous=$existing->fetch(PDO::FETCH_ASSOC);
-        $examId=$previous?true:false;
-        if($examId){$up=$db->prepare('UPDATE exam_configs SET formation_id=?,module_id=?,active=?,state=?,starts_at=?,closes_at=?,attempts_allowed=?,correction_mode=?,correction_at=?,updated_by=?,updated_at=? WHERE level_id=?');$up->execute([$formationId,$moduleId,$active,$state,$start,$close,(int)$allowed,$correctionMode,$correctionDate,$by,$now,$levelId]);}
-        else{$ins=$db->prepare('INSERT INTO exam_configs(id,formation_id,module_id,level_id,active,state,starts_at,closes_at,attempts_allowed,pass_percent,correction_mode,correction_at,correction_published,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,90,?,?,0,?,?)');$ins->execute([$id,$formationId,$moduleId,$levelId,$active,$state,$start,$close,(int)$allowed,$correctionMode,$correctionDate,$by,$now]);}
-        $db->prepare('INSERT INTO trainer_actions(trainer_staff_id,action,learner_uid,level_id,module_id,details,created_at) VALUES(?,?,?,?,?,?,?)')->execute([currentStaffId($db),'exam_config','',$levelId,$moduleId,$active?'active':'desactive',gmdate('c')]);
-        auditLog($db,'exam_config_update','exam',$levelId,['before'=>$previous,'after'=>['active'=>$active,'state'=>$state,'starts_at'=>$start,'closes_at'=>$close,'attempts_allowed'=>(int)$allowed,'correction_mode'=>$correctionMode,'correction_at'=>$correctionDate]]);
+        $formationId=trim((string)($in['formation_id']??''));$active=(int)($in['active']??0)===1?1:0;$starts=trim((string)($in['starts_at']??''));$closes=trim((string)($in['closes_at']??''));$allowed=filter_var($in['attempts_allowed']??1,FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>100]]);$correctionMode=trim((string)($in['correction_mode']??'manuel'));$correctionAt=trim((string)($in['correction_at']??''));
+        if(!preg_match('#^[a-zA-Z0-9_-]+$#',$formationId)||$allowed===false||!in_array($correctionMode,['immediate','programme','manuel'],true))out(['error'=>'bad_data']);
+        $formationCheck=$db->prepare('SELECT 1 FROM formations WHERE id=? AND active=1');$formationCheck->execute([$formationId]);if(!$formationCheck->fetchColumn())out(['error'=>'not_found']);
+        if(canTrainer()&&!trainerCanFormation($db,currentStaffId($db),$formationId))out(['error'=>'forbidden']);
+        $startTime=$starts!==''?strtotime($starts):null;$closeTime=$closes!==''?strtotime($closes):null;$correctionTime=$correctionAt!==''?strtotime($correctionAt):null;
+        if(($starts!==''&&$startTime===false)||($closes!==''&&$closeTime===false)||($correctionAt!==''&&$correctionTime===false))out(['error'=>'bad_data']);
+        $start=$startTime!==null?gmdate('c',$startTime):null;$close=$closeTime!==null?gmdate('c',$closeTime):null;$correctionDate=$correctionTime!==null?gmdate('c',$correctionTime):null;if($start&&$close&&$closeTime<=$startTime)out(['error'=>'bad_period']);
+        $state=$active?($start&&$startTime>time()?'programme':'actif'):'desactive';$by=(string)($_SESSION['uid']??$_SESSION['staff_username']??'');$now=gmdate('c');
+        $existing=$db->prepare('SELECT active,state,starts_at,closes_at,attempts_allowed,correction_mode,correction_at FROM formation_exam_configs WHERE formation_id=?');$existing->execute([$formationId]);$previous=$existing->fetch(PDO::FETCH_ASSOC);
+        $up=$db->prepare('UPDATE formation_exam_configs SET active=?,state=?,starts_at=?,closes_at=?,attempts_allowed=?,correction_mode=?,correction_at=?,updated_by=?,updated_at=? WHERE formation_id=?');$up->execute([$active,$state,$start,$close,(int)$allowed,$correctionMode,$correctionDate,$by,$now,$formationId]);
+        $db->prepare('INSERT INTO trainer_actions(trainer_staff_id,action,learner_uid,level_id,module_id,details,created_at) VALUES(?,?,?,?,?,?,?)')->execute([currentStaffId($db),'exam_config','','','',$formationId.' · '.($active?'active':'desactive'),$now]);
+        auditLog($db,'exam_config_update','exam',$formationId,['before'=>$previous,'after'=>['active'=>$active,'state'=>$state,'starts_at'=>$start,'closes_at'=>$close,'attempts_allowed'=>(int)$allowed,'correction_mode'=>$correctionMode,'correction_at'=>$correctionDate]]);
         out(['ok'=>true,'state'=>$state]);
     }
     if($action==='test_trainer_extra_attempt'||$action==='test_trainer_unlock_level'||$action==='exam_corrections_publish'||$action==='test_trainer_results'){
         if($action==='test_trainer_extra_attempt'||$action==='test_trainer_unlock_level'){
             $levelId=trim((string)($in['level_id']??''));$uid=trim((string)($in['learner_uid']??''));if($levelId===''||$uid==='')out(['error'=>'bad_data']);
-            $level=$db->prepare('SELECT module_id,formation_id FROM test_levels WHERE id=?');$level->execute([$levelId]);$lr=$level->fetch(PDO::FETCH_ASSOC);if(!$lr)out(['error'=>'not_found']);
+            $level=$db->prepare('SELECT * FROM test_levels WHERE id=?');$level->execute([$levelId]);$lr=$level->fetch(PDO::FETCH_ASSOC);if(!$lr)out(['error'=>'not_found']);
             $reason=mb_substr(trim((string)($in['reason']??'')),0,200);if($action==='test_trainer_unlock_level'&&mb_strlen($reason)<5)out(['error'=>'reason_required','msg'=>'Indiquez le motif du déblocage (5 caractères minimum).']);
-            ensureProgress($db,$uid,$levelId,(string)$lr['module_id'],(string)$lr['formation_id']);
+            $progress=ensureProgress($db,$uid,$levelId,(string)$lr['module_id'],(string)$lr['formation_id']);
             if($action==='test_trainer_extra_attempt'){
+                $progress=refreshLevelAttemptCycle($db,$uid,$lr,$progress);
+                $remaining=(int)($progress['attempts_allowed']??$lr['attempts_allowed'])+(int)($progress['extra_attempts']??0)-(int)($progress['attempts_used']??0);
+                if((int)($progress['validated']??0)!==1&&($remaining<=0||(int)($progress['cooldown_remaining_seconds']??0)>0))out(['error'=>'attempts_cooldown','msg'=>'Les tentatives sont épuisées. L’apprenant peut s’entraîner pendant le délai ; trois tentatives seront automatiquement rétablies après une heure.','cooldown_until'=>$progress['cooldown_until']??null,'remaining_seconds'=>(int)($progress['cooldown_remaining_seconds']??0)]);
                 $db->prepare('UPDATE level_progress SET extra_attempts=extra_attempts+1,updated_at=? WHERE learner_uid=? AND level_id=?')->execute([gmdate('c'),$uid,$levelId]);$details='extra_attempt';
                 auditLog($db,'extra_attempt_grant','learner',$uid,['level_id'=>$levelId,'reason'=>$reason]);
             }else{
@@ -984,29 +1406,17 @@ case 'test_trainer_results':
             $db->prepare('INSERT INTO trainer_actions(trainer_staff_id,action,learner_uid,level_id,module_id,details,created_at) VALUES(?,?,?,?,?,?,?)')->execute([currentStaffId($db),$details,$uid,$levelId,(string)$lr['module_id'],$reason,gmdate('c')]);out(['ok'=>true]);
         }
         if($action==='exam_corrections_publish'){
-            $levelId=trim((string)($in['level_id']??''));$published=(int)($in['published']??1)===1?1:0;if($levelId==='')out(['error'=>'bad_data']);
-            $old=$db->prepare('SELECT correction_published FROM exam_configs WHERE level_id=?');$old->execute([$levelId]);$previous=$old->fetchColumn();
-            $db->prepare('UPDATE exam_configs SET correction_published=?,updated_by=?,updated_at=? WHERE level_id=?')->execute([$published,(string)($_SESSION['uid']??$_SESSION['admin_name']??''),gmdate('c'),$levelId]);
-            auditLog($db,'exam_corrections_publish','exam',$levelId,['before'=>$previous===false?null:(int)$previous,'after'=>$published]);out(['ok'=>true]);
+            $formationId=trim((string)($in['formation_id']??''));$published=(int)($in['published']??1)===1?1:0;if($formationId===''||!preg_match('#^[a-zA-Z0-9_-]+$#',$formationId))out(['error'=>'bad_data']);
+            if(canTrainer()&&!trainerCanFormation($db,currentStaffId($db),$formationId))out(['error'=>'forbidden']);
+            $old=$db->prepare('SELECT correction_published FROM formation_exam_configs WHERE formation_id=?');$old->execute([$formationId]);$previous=$old->fetchColumn();if($previous===false)out(['error'=>'not_found']);
+            $db->prepare('UPDATE formation_exam_configs SET correction_published=?,updated_by=?,updated_at=? WHERE formation_id=?')->execute([$published,(string)($_SESSION['uid']??$_SESSION['staff_username']??''),gmdate('c'),$formationId]);
+            auditLog($db,'exam_corrections_publish','exam',$formationId,['before'=>(int)$previous,'after'=>$published]);out(['ok'=>true]);
         }
-        $mode=trim((string)($in['mode']??''));$moduleId=trim((string)($in['module_id']??''));$uid=trim((string)($in['learner_uid']??''));$sql='SELECT ta.id,ta.learner_uid,ta.formation_id,ta.module_id,ta.level_id,ta.mode,ta.attempt_number,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds FROM test_attempts ta WHERE 1=1';$params=[];if(canTrainer()){$sql.=' AND ta.learner_uid IN (SELECT learner_uid FROM learner_accounts WHERE trainer_staff_id=?) AND ta.formation_id IN (SELECT formation_id FROM staff_formations WHERE staff_id=?)';$params[]=currentStaffId($db);$params[]=currentStaffId($db);}if($mode!==''&&in_array($mode,['parcours','entrainement','examen'],true)){$sql.=' AND ta.mode=?';$params[]=$mode;}if($moduleId!==''){$sql.=' AND ta.module_id=?';$params[]=$moduleId;}if($uid!==''){$sql.=' AND ta.learner_uid=?';$params[]=$uid;} $sql.=' ORDER BY ta.started_at DESC LIMIT 500';$s=$db->prepare($sql);$s->execute($params);out(['results'=>$s->fetchAll(PDO::FETCH_ASSOC)]);
+        $mode=trim((string)($in['mode']??''));$moduleId=trim((string)($in['module_id']??''));$uid=trim((string)($in['learner_uid']??''));$sql='SELECT ta.id,ta.learner_uid,ta.formation_id,ta.module_id,ta.level_id,ta.mode,ta.attempt_number,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds,CASE WHEN ta.mode="examen" THEN "Examen général" ELSE l.name END level_name FROM test_attempts ta LEFT JOIN test_levels l ON l.id=ta.level_id WHERE 1=1';$params=[];if(canTrainer()){$sql.=' AND ta.learner_uid IN (SELECT learner_uid FROM learner_accounts WHERE trainer_staff_id=?) AND ta.formation_id IN (SELECT formation_id FROM staff_formations WHERE staff_id=?)';$params[]=currentStaffId($db);$params[]=currentStaffId($db);}if($mode!==''&&in_array($mode,['parcours','entrainement','examen'],true)){$sql.=' AND ta.mode=?';$params[]=$mode;}if($moduleId!==''){$sql.=' AND ta.module_id=?';$params[]=$moduleId;}if($uid!==''){$sql.=' AND ta.learner_uid=?';$params[]=$uid;} $sql.=' ORDER BY ta.started_at DESC LIMIT 500';$s=$db->prepare($sql);$s->execute($params);out(['results'=>$s->fetchAll(PDO::FETCH_ASSOC)]);
     }
 
 case 'module_questions':
     out(['error' => 'gone', 'msg' => 'Ce point d’entrée a été supprimé : utilisez test_attempt_start.']);
-    if (role() !== 'learner') out(['error' => 'authentication_required']);
-    $moduleId = trim((string)($in['module_id'] ?? ''));
-    if (!preg_match('#^[a-zA-Z0-9_-]+$#', $moduleId)) out(['error' => 'bad_data']);
-    $m = $db->prepare('SELECT m.id,m.name,m.duration_minutes,m.question_count,m.pass_percent,f.id formation_id,f.name formation_name FROM modules m JOIN formations f ON f.id=m.formation_id WHERE m.id=? AND m.active=1 AND f.active=1'); $m->execute([$moduleId]); $module = $m->fetch(PDO::FETCH_ASSOC);
-    if (!$module) out(['error' => 'not_found']);
-    $learnerFormation = (string)($_SESSION['formation_id'] ?? '');
-    if ($learnerFormation === '' || !hash_equals($learnerFormation, (string)$module['formation_id'])) out(['error' => 'forbidden']);
-    $q = $db->prepare('SELECT id,question,type,points,explanation FROM questions WHERE module_id=? AND active=1 ORDER BY position,id LIMIT 100'); $q->execute([$moduleId]); $questions = $q->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($questions as &$question) {
-        $a = $db->prepare('SELECT id,answer FROM answers WHERE question_id=? ORDER BY position,id'); $a->execute([$question['id']]); $question['answers'] = $a->fetchAll(PDO::FETCH_ASSOC);
-        unset($question['explanation']);
-    }
-    unset($question); out(['module' => $module, 'questions' => $questions]);
 
 case 'evaluation_submit':
     out(['error' => 'gone', 'msg' => 'Ce point d’entrée a été supprimé : utilisez test_attempt_submit.']);
@@ -1015,7 +1425,7 @@ case 'login_learner':
     out(['ok' => false, 'deprecated' => true, 'msg' => 'Utilisez la connexion centrale avec votre identifiant personnel et votre mot de passe.']);
 
 case 'logout_learner':
-    unset($_SESSION['uid'], $_SESSION['name']);
+    unset($_SESSION['uid'], $_SESSION['name'], $_SESSION['formation_id'], $_SESSION['must_change_password']);
     out(['ok' => true]);
 
 case 'login':
@@ -1061,10 +1471,12 @@ case 'install':
     if (!setupKeyReady()) out(['ok' => false, 'msg' => 'Configurez NDARTECH_SETUP_KEY avec une clé secrète d’au moins 32 caractères, puis réessayez.']);
     if (cfg($db, 'admin_hash') !== false) out(['ok' => false, 'msg' => 'L’installation a déjà été effectuée.']);
     if (!hash_equals(SETUP_KEY, (string)($in['key'] ?? ''))) { sleep(1); out(['ok' => false, 'msg' => 'Clé d’installation incorrecte.']); }
-    $u = nm((string)($in['u'] ?? '')); $p = (string)($in['p'] ?? '');
-    if ($u === '' || mb_strlen($u) > 60 || strlen($p) < 12) out(['ok' => false, 'msg' => 'Identifiant obligatoire et mot de passe de 12 caractères minimum.']);
-    setCfg($db, 'admin_user', $u); setCfg($db, 'admin_hash', password_hash($p, PASSWORD_DEFAULT));
-    out(['ok' => true]);
+    $requestedUsername = nm((string)($in['u'] ?? '')); $p = (string)($in['p'] ?? '');
+    if ($requestedUsername === '' || mb_strlen($requestedUsername) > 60 || strlen($p) < 12) out(['ok' => false, 'msg' => 'Identifiant obligatoire et mot de passe de 12 caractères minimum.']);
+    $u = generatedStaffUsername($db, 'admin', $requestedUsername);
+    if ($u === '') out(['ok' => false, 'msg' => 'Impossible de générer un identifiant unique.']);
+    setCfg($db, 'admin_user', nm($u)); setCfg($db, 'admin_hash', password_hash($p, PASSWORD_DEFAULT));
+    out(['ok' => true, 'username' => $u]);
 
 case 'login_admin':
     out(['ok' => false, 'deprecated' => true, 'msg' => 'Utilisez la connexion centrale de la plateforme.']);
@@ -1074,7 +1486,7 @@ case 'change_temporary_password':
     if (strlen($new) < 12) out(['ok' => false, 'msg' => 'Le nouveau mot de passe doit contenir au moins 12 caractères.']);
     if (!hash_equals($new, $confirm)) out(['ok' => false, 'msg' => 'Les mots de passe ne sont pas identiques.']);
     if (!empty($_SESSION['admin'])) {
-        $u = (string)($_SESSION['staff_username'] ?? ''); $s = $db->prepare('UPDATE staff SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE username=?'); $s->execute([password_hash($new, PASSWORD_DEFAULT),$u]);
+        $u = (string)($_SESSION['staff_username'] ?? ''); $s = $db->prepare('UPDATE staff SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE LOWER(username)=LOWER(?)'); $s->execute([password_hash($new, PASSWORD_DEFAULT),$u]);
     } elseif (!empty($_SESSION['uid'])) {
         $uid = (string)$_SESSION['uid']; $s = $db->prepare('UPDATE learner_accounts SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE learner_uid=?'); $s->execute([password_hash($new, PASSWORD_DEFAULT),$uid]);
     } else out(['error' => 'forbidden']);
@@ -1090,12 +1502,12 @@ case 'change_password':
     $current = (string)($in['current'] ?? ''); $new = (string)($in['new'] ?? ''); $confirm = (string)($in['confirm'] ?? '');
     if (strlen($new) < 12) out(['ok' => false, 'msg' => 'Le nouveau mot de passe doit contenir au moins 12 caractères.']);
     if (!hash_equals($new, $confirm)) out(['ok' => false, 'msg' => 'Les deux nouveaux mots de passe ne sont pas identiques.']);
-    if (staffRole() === 'admin' && isset($_SESSION['staff_username']) && $_SESSION['staff_username'] === cfg($db, 'admin_user')) {
+    if (staffRole() === 'admin' && isset($_SESSION['staff_username']) && strcasecmp((string)$_SESSION['staff_username'], (string)cfg($db, 'admin_user')) === 0) {
         $hash = cfg($db, 'admin_hash');
         if ($hash === false || !password_verify($current, $hash)) out(['ok' => false, 'msg' => 'Mot de passe actuel incorrect.']);
         setCfg($db, 'admin_hash', password_hash($new, PASSWORD_DEFAULT));
     } else {
-        $u = (string)($_SESSION['staff_username'] ?? ''); $s = $db->prepare('SELECT password_hash FROM staff WHERE username=? AND active=1'); $s->execute([$u]); $row = $s->fetch(PDO::FETCH_ASSOC);
+        $u = (string)($_SESSION['staff_username'] ?? ''); $s = $db->prepare('SELECT password_hash FROM staff WHERE LOWER(username)=LOWER(?) AND active=1'); $s->execute([$u]); $row = $s->fetch(PDO::FETCH_ASSOC);
         if (!$row || !password_verify($current, $row['password_hash'])) out(['ok' => false, 'msg' => 'Mot de passe actuel incorrect.']);
         $s = $db->prepare('UPDATE staff SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE username=?'); $s->execute([password_hash($new, PASSWORD_DEFAULT), $u]);
     }
@@ -1200,8 +1612,7 @@ case 'staff_create':
     $formations = is_array($in['formations'] ?? null) ? $in['formations'] : [];
     $formations = array_values(array_filter($formations, function($f){ return is_string($f) && $f !== ''; }));
     if ($r === 'formateur' && count($formations) === 0) out(['ok' => false, 'msg' => 'Un formateur doit être affecté à au moins une formation.']);
-    $base = strtoupper(preg_replace('/[^A-Za-z]/', '', $last . substr($first, 0, 1))); if ($base === '') $base = 'FORM';
-    $u = ''; for ($i = 0; $i < 20; $i++) { $candidate = 'F-' . substr($base, 0, 8) . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6)); $check = $db->prepare('SELECT 1 FROM staff WHERE username=?'); $check->execute([$candidate]); if (!$check->fetchColumn()) { $u = $candidate; break; } }
+    $u = generatedStaffUsername($db, $r, $first);
     if ($u === '') out(['ok' => false, 'msg' => 'Impossible de générer un identifiant unique.']);
     $p = bin2hex(random_bytes(6)); $p = substr($p, 0, 12);
     try { $s = $db->prepare('INSERT INTO staff(username,password_hash,role,active,created,first_name,last_name,must_change_password,temporary_password,credential_cipher) VALUES(?,?,?,?,?,?,?,?,?,"")'); $s->execute([$u, password_hash($p, PASSWORD_DEFAULT), $r, 1, gmdate('c'), $first, $last, 1, 1]); $staffId = (int)$db->lastInsertId(); }
@@ -1256,7 +1667,7 @@ case 'staff_delete':
     if ($deletedUsername === false) out(['error' => 'not_found']);
     if (hash_equals((string)($_SESSION['staff_username'] ?? ''), (string)$deletedUsername)) out(['error' => 'forbidden', 'msg' => 'Vous ne pouvez pas supprimer votre propre compte.']);
     $assignedLearners = $db->prepare('SELECT COUNT(*) FROM learner_accounts WHERE trainer_staff_id=?'); $assignedLearners->execute([$id]);
-    if ((int)$assignedLearners->fetchColumn() > 0) out(['ok' => false, 'msg' => 'Ce compte encadre encore des apprenants. Réaffectez-les ou désactivez le formateur avant de le supprimer.']);
+    if ((int)$assignedLearners->fetchColumn() > 0) out(['ok' => false, 'msg' => 'Ce compte encadre encore des apprenants. Réaffectez-les avant de supprimer le formateur.']);
     auditLog($db, 'staff_delete', 'staff', (string)$id, ['username' => (string)$deletedUsername]);
     $s = $db->prepare('DELETE FROM staff WHERE id=?'); $s->execute([$id]);
     out(['ok' => true]);
@@ -1308,28 +1719,15 @@ case 'learner_create_bulk':
     // avec son prénom, son nom, sa formation autorisée et un compte individuel.
     if (!canTrainer()) out(['error' => 'forbidden']);
     out(['ok' => false, 'msg' => 'Utilisez la création individuelle de l’apprenant.']);
-    $names = $in['names'] ?? [];
-    if (!is_array($names)) out(['error' => 'bad_data']);
-    $createdBy = (string)($_SESSION['staff_username'] ?? ''); $created = gmdate('c'); $results = [];
-    foreach (array_slice($names, 0, 300) as $rawName) {
-        $name = trim(preg_replace('/\s+/u', ' ', (string)$rawName));
-        if ($name === '' || mb_strlen($name) > 100) continue;
-        $normalized = nm($name); $uid = substr(sha1($normalized), 0, 16); $learnerId = mkid($name);
-        $existing = $db->prepare('SELECT name,learner_uid,learner_id,active FROM learners WHERE normalized_name=?'); $existing->execute([$normalized]); $row = $existing->fetch(PDO::FETCH_ASSOC);
-        if ($row) { $db->prepare('UPDATE learners SET active=1 WHERE normalized_name=?')->execute([$normalized]); $learnerId = (string)$row['learner_id']; $uid = (string)$row['learner_uid']; }
-        else { $s = $db->prepare('INSERT INTO learners(name,normalized_name,learner_uid,learner_id,active,created,created_by) VALUES(?,?,?,?,1,?,?)'); $s->execute([$name,$normalized,$uid,$learnerId,$created,$createdBy]); }
-        $results[] = ['name' => $name, 'id' => $learnerId, 'uid' => $uid];
-    }
-    out(['ok' => true, 'rows' => $results]);
 
 case 'learner_list':
     if (!canReadStaff()) out(['error' => 'forbidden']);
     if (canTrainer()) {
         $staffId = currentStaffId($db);
-        $s = $db->prepare('SELECT l.id,l.name,l.learner_uid,l.learner_id,l.active,l.created,l.created_by,a.identifier,a.formation_id,a.must_change_password FROM learners l JOIN learner_accounts a ON a.learner_uid=l.learner_uid JOIN staff_formations sf ON sf.staff_id=a.trainer_staff_id AND sf.formation_id=a.formation_id WHERE a.trainer_staff_id=? ORDER BY l.name COLLATE NOCASE');
+        $s = $db->prepare('SELECT l.id,l.name,l.learner_uid,l.learner_id,l.active,l.created,l.created_by,a.identifier,a.formation_id,a.trainer_staff_id,a.must_change_password FROM learners l JOIN learner_accounts a ON a.learner_uid=l.learner_uid JOIN staff_formations sf ON sf.staff_id=a.trainer_staff_id AND sf.formation_id=a.formation_id WHERE a.trainer_staff_id=? ORDER BY l.name COLLATE NOCASE');
         $s->execute([$staffId]); $rows = $s->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $rows = $db->query('SELECT l.id,l.name,l.learner_uid,l.learner_id,l.active,l.created,l.created_by,a.identifier,a.formation_id,a.must_change_password FROM learners l LEFT JOIN learner_accounts a ON a.learner_uid=l.learner_uid ORDER BY l.name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
+        $rows = $db->query('SELECT l.id,l.name,l.learner_uid,l.learner_id,l.active,l.created,l.created_by,a.identifier,a.formation_id,a.trainer_staff_id,a.must_change_password FROM learners l LEFT JOIN learner_accounts a ON a.learner_uid=l.learner_uid ORDER BY l.name COLLATE NOCASE')->fetchAll(PDO::FETCH_ASSOC);
     }
     foreach ($rows as &$row) $row['identifier'] = $row['identifier'] ?? $row['learner_id'];
     unset($row);
@@ -1383,6 +1781,34 @@ case 'learner_update':
     auditLog($db, 'learner_update', 'learner', (string)$lr['learner_uid'], ['before' => ['name' => $lr['name'], 'formation_id' => $lr['formation_id']], 'after' => ['name' => $updated['name'], 'formation_id' => $updated['formation_id']]]);
     out(['ok' => true]);
 
+case 'learner_reassign':
+    if (!canAdmin()) out(['error' => 'forbidden']);
+    $id = filter_var($in['id'] ?? null, FILTER_VALIDATE_INT);
+    $trainerId = filter_var($in['trainer_staff_id'] ?? null, FILTER_VALIDATE_INT);
+    if (!$id || !$trainerId) out(['error' => 'bad_data']);
+    $learnerQuery = $db->prepare('SELECT l.learner_uid,a.formation_id,a.trainer_staff_id FROM learners l LEFT JOIN learner_accounts a ON a.learner_uid=l.learner_uid WHERE l.id=?');
+    $learnerQuery->execute([$id]); $learner = $learnerQuery->fetch(PDO::FETCH_ASSOC);
+    if (!$learner) out(['error' => 'not_found']);
+    if (empty($learner['formation_id'])) out(['ok' => false, 'msg' => 'Cet apprenant ne possède pas de compte réaffectable.']);
+    $trainerQuery = $db->prepare('SELECT role,active FROM staff WHERE id=?');
+    $trainerQuery->execute([$trainerId]); $trainer = $trainerQuery->fetch(PDO::FETCH_ASSOC);
+    if (!$trainer || $trainer['role'] !== 'formateur' || (int)$trainer['active'] !== 1) out(['ok' => false, 'msg' => 'Choisissez un formateur actif.']);
+    if (!trainerCanFormation($db, $trainerId, (string)$learner['formation_id'])) out(['ok' => false, 'msg' => 'Ce formateur n’est pas affecté à la formation de l’apprenant.']);
+    if ((int)$learner['trainer_staff_id'] === $trainerId) out(['ok' => true]);
+    try {
+        $db->beginTransaction();
+        $db->prepare('UPDATE learner_accounts SET trainer_staff_id=? WHERE learner_uid=?')->execute([$trainerId, (string)$learner['learner_uid']]);
+        auditLog($db, 'learner_reassign', 'learner', (string)$learner['learner_uid'], [
+            'before_trainer_staff_id' => $learner['trainer_staff_id'] === null ? null : (int)$learner['trainer_staff_id'],
+            'after_trainer_staff_id' => $trainerId
+        ]);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
+    out(['ok' => true]);
+
 case 'learner_set_active':
     if (!canTrainer() && !canAdmin()) out(['error' => 'forbidden']);
     $id = filter_var($in['id'] ?? null, FILTER_VALIDATE_INT);
@@ -1406,18 +1832,24 @@ case 'learner_set_active':
     out(['ok' => true]);
 
 case 'learner_delete':
-    if (!canTrainer() && !canAdmin()) out(['error' => 'forbidden']);
+    if (!canAdmin()) out(['error' => 'forbidden']);
     $id = filter_var($in['id'] ?? null, FILTER_VALIDATE_INT);
-    if (!$id) out(['error' => 'bad_data']);
-    if (canTrainer() && !trainerOwnsLearner($db, currentStaffId($db), (int)$id)) out(['error' => 'forbidden']);
-    $row = $db->prepare('SELECT learner_uid,active FROM learners WHERE id=?'); $row->execute([$id]); $learner = $row->fetch(PDO::FETCH_ASSOC);
+    if (!$id) out(['ok' => false, 'msg' => 'Apprenant invalide.']);
+    $row = $db->prepare('SELECT learner_uid FROM learners WHERE id=?'); $row->execute([$id]); $learner = $row->fetch(PDO::FETCH_ASSOC);
     if (!$learner) out(['error' => 'not_found']);
-    $learnerUid = $learner['learner_uid'];
+    $learnerUid = (string)$learner['learner_uid'];
     try {
         $db->beginTransaction();
-        $db->prepare('UPDATE learners SET active=0 WHERE id=?')->execute([$id]);
-        if ($learnerUid !== false) { $db->prepare('UPDATE learner_accounts SET active=0 WHERE learner_uid=?')->execute([$learnerUid]); }
-        auditLog($db, 'learner_deactivate', 'learner', (string)$learnerUid, ['before_active' => (int)$learner['active'], 'after_active' => 0]);
+        $db->prepare('DELETE FROM test_attempt_answers WHERE attempt_id IN (SELECT id FROM test_attempts WHERE learner_uid=?)')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM test_attempts WHERE learner_uid=?')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM level_progress WHERE learner_uid=?')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM evaluations WHERE learner_uid=?')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM trainer_actions WHERE learner_uid=?')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM kv WHERE path IN (?,?)')->execute(['results/'.$learnerUid, 'project_grades/'.$learnerUid]);
+        $db->prepare('DELETE FROM learner_accounts WHERE learner_uid=?')->execute([$learnerUid]);
+        $db->prepare('DELETE FROM learners WHERE id=?')->execute([$id]);
+        $db->prepare('DELETE FROM audit_log WHERE resource_type=? AND resource_id=?')->execute(['learner', $learnerUid]);
+        auditLog($db, 'learner_permanent_delete', 'learner', $learnerUid, ['records_removed' => true]);
         $db->commit();
     } catch (Throwable $e) {
         if ($db->inTransaction()) $db->rollBack();

@@ -1,5 +1,5 @@
 <?php
-// Serveur du site de QCM — PHP 7.4+ avec SQLite (extension pdo_sqlite).
+// Serveur du site de QCM — PHP 8.0+ avec SQLite (extension pdo_sqlite).
 // 1) Configurez NDARTECH_SETUP_KEY avant la première installation.
 // 2) SALT doit rester identique à la valeur SALT utilisée pour créer les identifiants (ne pas modifier si des identifiants existent).
 // Configure NDARTECH_SETUP_KEY in the server environment before first installation.
@@ -75,6 +75,10 @@ function out(array $a): void {
 }
 function setupKeyReady(): bool { return SETUP_KEY !== 'REMPLACEZ-CETTE-CLE' && strlen(SETUP_KEY) >= 32; }
 
+const LOGIN_FAILURE_LIMIT = 10;
+const LOGIN_FAILURE_WINDOW_SECONDS = 900;
+const LOGIN_FAILURE_COOLDOWN_SECONDS = 900;
+
 function checkRateLimit(): void {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $now = time();
@@ -135,6 +139,69 @@ function checkRateLimit(): void {
             $db->prepare('UPDATE rate_limits SET count=count+1 WHERE subject_type=? AND subject_id=? AND window_start=?')->execute([$key, (string)$id, $windowStartStr]);
         }
     }
+}
+
+function rejectLoginDuringCooldown(int $blockedUntil): void {
+    $remainingMinutes = max(1, (int)ceil(($blockedUntil - time()) / 60));
+    $unit = $remainingMinutes === 1 ? 'minute' : 'minutes';
+    out(['error' => 'attempts_cooldown', 'msg' => "Trop de tentatives de connexion depuis cette adresse IP. Réessayez dans $remainingMinutes $unit."]);
+}
+
+function checkLoginAttemptLimit(PDO $db): void {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $now = time();
+    $db->prepare('DELETE FROM login_attempt_limits WHERE window_started_at <= ? AND blocked_until <= ?')->execute([$now - LOGIN_FAILURE_WINDOW_SECONDS, $now]);
+    $s = $db->prepare('SELECT blocked_until FROM login_attempt_limits WHERE ip=?');
+    $s->execute([$ip]);
+    $blockedUntil = (int)($s->fetchColumn() ?: 0);
+    if ($blockedUntil > $now) rejectLoginDuringCooldown($blockedUntil);
+}
+
+function recordLoginFailure(PDO $db): int {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $now = time();
+    $s = $db->prepare(
+        'INSERT INTO login_attempt_limits(ip,failed_count,window_started_at,blocked_until) VALUES(?,1,?,0)
+         ON CONFLICT(ip) DO UPDATE SET
+         failed_count=CASE
+             WHEN login_attempt_limits.blocked_until > ? THEN login_attempt_limits.failed_count
+             WHEN login_attempt_limits.window_started_at <= ? THEN 1
+             ELSE login_attempt_limits.failed_count+1
+         END,
+         window_started_at=CASE
+             WHEN login_attempt_limits.blocked_until > ? THEN login_attempt_limits.window_started_at
+             WHEN login_attempt_limits.window_started_at <= ? THEN excluded.window_started_at
+             ELSE login_attempt_limits.window_started_at
+         END,
+         blocked_until=CASE
+             WHEN login_attempt_limits.blocked_until > ? THEN login_attempt_limits.blocked_until
+             WHEN login_attempt_limits.window_started_at <= ? THEN 0
+             ELSE login_attempt_limits.blocked_until
+         END'
+    );
+    $s->execute([
+        $ip,
+        $now,
+        $now,
+        $now - LOGIN_FAILURE_WINDOW_SECONDS,
+        $now,
+        $now - LOGIN_FAILURE_WINDOW_SECONDS,
+        $now,
+        $now - LOGIN_FAILURE_WINDOW_SECONDS,
+    ]);
+    $state = $db->prepare('SELECT failed_count,blocked_until FROM login_attempt_limits WHERE ip=?');
+    $state->execute([$ip]);
+    $row = $state->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new RuntimeException('Login attempt state was not saved');
+    $blockedUntil = (int)$row['blocked_until'];
+    if ((int)$row['failed_count'] >= LOGIN_FAILURE_LIMIT && $blockedUntil <= $now) {
+        $blockedUntil = $now + LOGIN_FAILURE_COOLDOWN_SECONDS;
+        $db->prepare('UPDATE login_attempt_limits SET blocked_until=? WHERE ip=? AND blocked_until<=?')->execute([$blockedUntil, $ip, $now]);
+        $state->execute([$ip]);
+        $row = $state->fetch(PDO::FETCH_ASSOC);
+        $blockedUntil = (int)($row['blocked_until'] ?? 0);
+    }
+    return $blockedUntil;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'qcm') out(['error' => 'bad_request']);
@@ -212,6 +279,8 @@ if (!in_array('subject_type', $rateLimitColumns, true)) {
     }
 }
 $db->exec('CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC)');
+$db->exec('CREATE TABLE IF NOT EXISTS login_attempt_limits(ip TEXT PRIMARY KEY, failed_count INTEGER NOT NULL DEFAULT 0, window_started_at INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0)');
+$db->exec('CREATE INDEX IF NOT EXISTS idx_login_attempt_limits_expiry ON login_attempt_limits(window_started_at,blocked_until)');
 try { $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_attempt_number ON test_attempts(learner_uid,level_id,mode,attempt_number) WHERE mode<>'entrainement'"); } catch (PDOException $e) {}
 $db->exec("CREATE INDEX IF NOT EXISTS idx_test_attempts_learner ON test_attempts(learner_uid,formation_id,module_id,level_id,mode,status)");
 $db->exec("CREATE INDEX IF NOT EXISTS idx_level_progress_learner ON level_progress(learner_uid,validated)");
@@ -252,7 +321,7 @@ $examDefault = $db->prepare('INSERT OR IGNORE INTO exam_configs(id,formation_id,
 foreach ($levelSeed as $level) $examDefault->execute(['exam-'.$level[2],$level[0],$level[1],'level-'.$level[2],$now ?? gmdate('c')]);
 
 // Vérifier à chaque requête qu'un compte personnel staff existe encore, reste actif et n'a pas changé de rôle.
-if (!empty($_SESSION['admin']) && !empty($_SESSION['staff_username'])) {
+if (!empty($_SESSION['staff_username'])) {
     $sessionStaffName = (string)$_SESSION['staff_username'];
     $sessionStaff = $db->prepare('SELECT role,active FROM staff WHERE LOWER(username)=LOWER(?) LIMIT 1');
     $sessionStaff->execute([$sessionStaffName]);
@@ -260,8 +329,11 @@ if (!empty($_SESSION['admin']) && !empty($_SESSION['staff_username'])) {
     $primaryAdminName = (string)cfg($db, 'admin_user');
     if (hash_equals(strtolower($primaryAdminName), strtolower($sessionStaffName))) {
         $_SESSION['staff_role'] = 'admin';
-    } elseif ($sessionStaffRow && (int)$sessionStaffRow['active'] === 1 && in_array((string)$sessionStaffRow['role'], ['admin', 'formateur'], true)) {
+        $_SESSION['admin'] = true;
+    } elseif ($sessionStaffRow && (int)$sessionStaffRow['active'] === 1 && in_array((string)$sessionStaffRow['role'], ['admin', 'formateur', 'lecture'], true)) {
         $_SESSION['staff_role'] = (string)$sessionStaffRow['role'];
+        if ($_SESSION['staff_role'] === 'admin') $_SESSION['admin'] = true;
+        else unset($_SESSION['admin']);
     } else {
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
@@ -509,6 +581,7 @@ function role(): string {
     if (empty($_SESSION['admin'])) {
         // Formateurs connectés sans admin (après correction)
         if (!empty($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'formateur') return 'formateur';
+        if (!empty($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'lecture') return 'lecture';
         // Administrateurs connectés
         if (!empty($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'admin') return 'admin';
         return 'none';
@@ -520,6 +593,8 @@ function canManage(): bool { return in_array(staffRole(), ['admin', 'formateur']
 function canTrainer(): bool { return staffRole() === 'formateur'; }
 function canAdmin(): bool { return !empty($_SESSION['admin']) && staffRole() === 'admin'; }
 function canReadStaff(): bool { return in_array(staffRole(), ['admin', 'formateur'], true); }
+function isReader(): bool { return staffRole() === 'lecture'; }
+function canReadPedagogy(): bool { return canAdmin() || isReader(); }
 function currentStaffId(PDO $db): int {
     $username = (string)($_SESSION['staff_username'] ?? '');
     if ($username === '') return 0;
@@ -1013,10 +1088,10 @@ function allowed(PDO $db, string $p, bool $write = false): bool {
 function cfg(PDO $db, string $k) { $s = $db->prepare('SELECT v FROM cfg WHERE k=?'); $s->execute([$k]); return $s->fetchColumn(); }
 function setCfg(PDO $db, string $k, string $v): void { $s = $db->prepare('INSERT INTO cfg(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v'); $s->execute([$k, $v]); }
 function generatedStaffUsername(PDO $db, string $staffRole, string $name): string {
-    $prefix = $staffRole === 'formateur' ? 'F_' : 'A_';
+    $prefix = $staffRole === 'formateur' ? 'F_' : ($staffRole === 'lecture' ? 'L_' : 'A_');
     $slug = strtolower(trim((string)preg_replace('/[^a-z0-9]+/', '_', nm($name)), '_'));
     if (strpos($slug, strtolower($prefix)) === 0) $slug = substr($slug, 2);
-    if ($slug === '') $slug = $staffRole === 'formateur' ? 'formateur' : 'admin';
+    if ($slug === '') $slug = $staffRole === 'formateur' ? 'formateur' : ($staffRole === 'lecture' ? 'lecteur' : 'admin');
     $base = $prefix . $slug;
     $check = $db->prepare('SELECT 1 FROM staff WHERE LOWER(username)=LOWER(?)');
     for ($i = 1; $i <= 10000; $i++) {
@@ -1114,7 +1189,7 @@ case 'test_grades':
         if ($uid === '' || $formationId === '') out(['error'=>'not_found']);
         out(['grade'=>calculateTestGrade($db,$uid,$formationId)]);
     }
-    if (!canReadStaff()) out(['error'=>'forbidden']);
+    if (!canReadStaff() && !isReader()) out(['error'=>'forbidden']);
     $sql = 'SELECT a.learner_uid,a.first_name,a.last_name,a.formation_id FROM learner_accounts a WHERE 1=1'; $params = [];
     if (canTrainer()) { $sql .= ' AND EXISTS (SELECT 1 FROM staff_formations sf WHERE sf.staff_id=a.trainer_staff_id AND sf.formation_id=a.formation_id) AND a.trainer_staff_id=?'; $params[] = currentStaffId($db); }
     $sql .= ' ORDER BY a.last_name COLLATE NOCASE,a.first_name COLLATE NOCASE'; $learners = $db->prepare($sql); $learners->execute($params); $grades = [];
@@ -1211,7 +1286,7 @@ case 'formations_list':
         $s = $db->prepare('SELECT id,name,description,icon,position FROM formations WHERE active=1 AND id=? ORDER BY position,name'); $s->execute([$formationId]);
     } elseif (canTrainer()) {
         $s = $db->prepare('SELECT f.id,f.name,f.description,f.icon,f.position FROM formations f JOIN staff_formations sf ON sf.formation_id=f.id WHERE f.active=1 AND sf.staff_id=? ORDER BY f.position,f.name'); $s->execute([currentStaffId($db)]);
-    } elseif (canReadStaff()) {
+    } elseif (canReadStaff() || isReader()) {
         $s = $db->query('SELECT id,name,description,icon,position FROM formations WHERE active=1 ORDER BY position,name');
     } else {
         out(['error' => 'authentication_required']);
@@ -1224,7 +1299,7 @@ case 'formations_list':
     unset($formation); out(['formations' => $rows]);
 
 case 'evaluations_list':
-    if (!canReadStaff()) out(['error' => 'forbidden']);
+    if (!canReadStaff() && !isReader()) out(['error' => 'forbidden']);
     $formation = trim((string)($in['formation_id'] ?? '')); $module = trim((string)($in['module_id'] ?? ''));
     $sql = 'SELECT e.id,e.learner_name,e.formation_id,f.name AS formation_name,e.module_id,m.name AS module_name,e.mode,e.score,e.total,e.percentage,e.duration_seconds,e.created FROM evaluations e LEFT JOIN formations f ON f.id=e.formation_id LEFT JOIN modules m ON m.id=e.module_id WHERE 1=1'; $params = [];
     if (canTrainer()) {
@@ -1553,6 +1628,7 @@ case 'logout_learner':
     out(['ok' => true]);
 
 case 'login':
+    checkLoginAttemptLimit($db);
     $u = isset($in['identifier']) ? (string)$in['identifier'] : (isset($in['u']) ? (string)$in['u'] : (isset($in['email']) ? (string)$in['email'] : ''));
     $p = isset($in['password']) ? (string)$in['password'] : (isset($in['p']) ? (string)$in['p'] : '');
     $remember = !empty($in['remember']);
@@ -1568,12 +1644,13 @@ case 'login':
         $s = $db->prepare('SELECT username,password_hash,role,active,must_change_password FROM staff WHERE LOWER(username)=?');
         $s->execute([$u]);
         $staff = $s->fetch(PDO::FETCH_ASSOC);
-        if ($staff && (int)$staff['active'] && in_array((string)$staff['role'], ['admin', 'formateur'], true) && password_verify($p, $staff['password_hash'])) { $staffRole = $staff['role']; $mustChange = (int)$staff['must_change_password'] === 1; $u = (string)$staff['username']; }
+        if ($staff && (int)$staff['active'] && in_array((string)$staff['role'], ['admin', 'formateur', 'lecture'], true) && password_verify($p, $staff['password_hash'])) { $staffRole = $staff['role']; $mustChange = (int)$staff['must_change_password'] === 1; $u = (string)$staff['username']; }
     }
     if ($staffRole !== '') {
         session_regenerate_id(true);
         if ($remember) { $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'); session_set_cookie_params(['lifetime' => 2592000, 'httponly' => true, 'samesite' => 'Lax', 'secure' => $secure]); setcookie(session_name(), session_id(), time() + 2592000, '/', '', $secure, true); }
         if ($staffRole === 'admin') { $_SESSION['admin'] = true; }
+        else unset($_SESSION['admin']);
         $_SESSION['staff_role'] = $staffRole; $_SESSION['staff_username'] = $u; $_SESSION['must_change_password'] = $mustChange; $_SESSION['last_activity'] = time();
         unset($_SESSION['uid'], $_SESSION['name'], $_SESSION['formation_id']); out(['ok' => true, 'role' => $staffRole, 'must_change_password' => $mustChange, 'csrf_token' => $_SESSION['csrf_token'] ?? '']);
     }
@@ -1590,6 +1667,8 @@ case 'login':
     // Les anciens comptes historiques sans mot de passe ni formation ne peuvent plus se connecter.
     // Ils sont conservés uniquement pour la compatibilité des résultats existants.
 
+    $blockedUntil = recordLoginFailure($db);
+    if ($blockedUntil > time()) rejectLoginDuringCooldown($blockedUntil);
     sleep(1); out(['ok' => false, 'msg' => 'Identifiant ou mot de passe incorrect.']);
 
 case 'install':
@@ -1610,7 +1689,7 @@ case 'change_temporary_password':
     $new = (string)($in['new'] ?? ''); $confirm = (string)($in['confirm'] ?? '');
     if (strlen($new) < 12) out(['ok' => false, 'msg' => 'Le nouveau mot de passe doit contenir au moins 12 caractères.']);
     if (!hash_equals($new, $confirm)) out(['ok' => false, 'msg' => 'Les mots de passe ne sont pas identiques.']);
-    if (in_array(staffRole(), ['admin', 'formateur'], true) && !empty($_SESSION['staff_username'])) {
+    if (in_array(staffRole(), ['admin', 'formateur', 'lecture'], true) && !empty($_SESSION['staff_username'])) {
         $u = (string)$_SESSION['staff_username'];
         if (staffRole() === 'admin' && strcasecmp($u, (string)cfg($db, 'admin_user')) === 0) {
             setCfg($db, 'admin_hash', password_hash($new, PASSWORD_DEFAULT));
@@ -1630,7 +1709,7 @@ case 'logout':
     session_regenerate_id(true); out(['ok' => true]);
 
 case 'change_password':
-    if (!canReadStaff()) out(['error' => 'forbidden']);
+    if (!canReadStaff() && !isReader()) out(['error' => 'forbidden']);
     $current = (string)($in['current'] ?? ''); $new = (string)($in['new'] ?? ''); $confirm = (string)($in['confirm'] ?? '');
     if (strlen($new) < 12) out(['ok' => false, 'msg' => 'Le nouveau mot de passe doit contenir au moins 12 caractères.']);
     if (!hash_equals($new, $confirm)) out(['ok' => false, 'msg' => 'Les deux nouveaux mots de passe ne sont pas identiques.']);
@@ -1700,7 +1779,7 @@ case 'admin_settings_set':
     out(['ok' => true]);
 
 case 'admin_dashboard':
-    if (!canReadStaff()) out(['error' => 'forbidden']);
+    if (!canReadStaff() && !isReader()) out(['error' => 'forbidden']);
     if (canTrainer()) {
         $staffId = currentStaffId($db);
         $s = $db->prepare('SELECT COUNT(*) FROM learner_accounts a JOIN staff_formations sf ON sf.staff_id=a.trainer_staff_id AND sf.formation_id=a.formation_id WHERE a.active=1 AND a.trainer_staff_id=?'); $s->execute([$staffId]); $learnerCount = (int)$s->fetchColumn();
@@ -1716,6 +1795,93 @@ case 'admin_dashboard':
         $latest = $db->query('SELECT learner_name,formation_id,module_id,score,total,percentage,created FROM evaluations ORDER BY created DESC LIMIT 8')->fetchAll(PDO::FETCH_ASSOC);
     }
     out(['learner_count' => $learnerCount, 'formation_count' => $formationCount, 'module_count' => $moduleCount, 'test_count' => $testCount, 'latest' => $latest]);
+
+case 'reader_progress_list':
+    if (!isReader()) out(['error' => 'forbidden']);
+    $rows = $db->query("
+        SELECT COALESCE(NULLIF(TRIM(COALESCE(a.first_name,'') || ' ' || COALESCE(a.last_name,'')),''),l.name,'Apprenant') AS learner_name,
+               COALESCE(f.name,'Formation non attribuée') AS formation_name,
+               CASE WHEN l.active=1 AND COALESCE(a.active,1)=1 THEN 1 ELSE 0 END AS active,
+               (SELECT COUNT(*) FROM test_levels tl WHERE tl.formation_id=a.formation_id AND tl.active=1) AS total_levels,
+               (SELECT COUNT(*) FROM level_progress lp JOIN test_levels tl ON tl.id=lp.level_id AND tl.active=1 WHERE lp.learner_uid=l.learner_uid AND lp.validated=1) AS validated_levels,
+               (SELECT COUNT(*) FROM test_attempts ta WHERE ta.learner_uid=l.learner_uid AND ta.status='submitted') AS submitted_attempts,
+               (SELECT ROUND(AVG(e.percentage),1) FROM evaluations e WHERE e.learner_uid=l.learner_uid) AS average_percentage,
+               (SELECT MAX(ta.submitted_at) FROM test_attempts ta WHERE ta.learner_uid=l.learner_uid AND ta.status='submitted') AS last_activity
+        FROM learners l
+        LEFT JOIN learner_accounts a ON a.learner_uid=l.learner_uid
+        LEFT JOIN formations f ON f.id=a.formation_id
+        ORDER BY learner_name COLLATE NOCASE
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    out(['rows' => $rows]);
+
+case 'reader_attempts_list':
+    if (!isReader()) out(['error' => 'forbidden']);
+    $rows = $db->query("
+        SELECT COALESCE(NULLIF(TRIM(COALESCE(a.first_name,'') || ' ' || COALESCE(a.last_name,'')),''),l.name,'Apprenant') AS learner_name,
+               COALESCE(f.name,ta.formation_id) AS formation_name,
+               COALESCE(m.name,ta.module_id) AS module_name,
+               CASE WHEN ta.mode='examen' THEN 'Examen général' ELSE COALESCE(tl.name,ta.level_id) END AS level_name,
+               ta.mode,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds
+        FROM test_attempts ta
+        LEFT JOIN learner_accounts a ON a.learner_uid=ta.learner_uid
+        LEFT JOIN learners l ON l.learner_uid=ta.learner_uid
+        LEFT JOIN formations f ON f.id=ta.formation_id
+        LEFT JOIN modules m ON m.id=ta.module_id
+        LEFT JOIN test_levels tl ON tl.id=ta.level_id
+        ORDER BY COALESCE(ta.submitted_at,ta.started_at) DESC
+        LIMIT 500
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    out(['rows' => $rows]);
+
+case 'pedagogical_questions_list':
+    if (!canReadPedagogy()) out(['error' => 'forbidden']);
+    $formationId = trim((string)($in['formation_id'] ?? ''));
+    $moduleId = trim((string)($in['module_id'] ?? ''));
+    if (($formationId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $formationId)) ||
+        ($moduleId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $moduleId))) out(['error' => 'bad_data']);
+    $sql = 'SELECT q.id,q.question,q.type,q.points,q.explanation,q.position,
+                   f.id AS formation_id,f.name AS formation_name,
+                   m.id AS module_id,m.name AS module_name,
+                   tl.name AS level_name,
+                   a.id AS answer_id,a.answer,a.is_correct,a.position AS answer_position
+            FROM questions q
+            JOIN modules m ON m.id=q.module_id
+            JOIN formations f ON f.id=m.formation_id
+            LEFT JOIN test_levels tl ON tl.id=q.level_id
+            LEFT JOIN answers a ON a.question_id=q.id
+            WHERE q.active=1 AND m.active=1 AND f.active=1';
+    $params = [];
+    if ($formationId !== '') { $sql .= ' AND f.id=?'; $params[] = $formationId; }
+    if ($moduleId !== '') { $sql .= ' AND m.id=?'; $params[] = $moduleId; }
+    $sql .= ' ORDER BY f.position,f.name,m.position,m.name,tl.position,tl.name,q.position,q.id,a.position,a.id';
+    $query = $db->prepare($sql);
+    $query->execute($params);
+    $questions = [];
+    foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $id = (int)$row['id'];
+        if (!isset($questions[$id])) {
+            $questions[$id] = [
+                'id' => $id,
+                'question' => (string)$row['question'],
+                'type' => (string)$row['type'],
+                'points' => (int)$row['points'],
+                'explanation' => (string)$row['explanation'],
+                'formation_id' => (string)$row['formation_id'],
+                'formation_name' => (string)$row['formation_name'],
+                'module_id' => (string)$row['module_id'],
+                'module_name' => (string)$row['module_name'],
+                'level_name' => (string)($row['level_name'] ?? ''),
+                'answers' => []
+            ];
+        }
+        if ($row['answer_id'] !== null) {
+            $questions[$id]['answers'][] = [
+                'answer' => (string)$row['answer'],
+                'is_correct' => (int)$row['is_correct'] === 1
+            ];
+        }
+    }
+    out(['questions' => array_values($questions)]);
 
 case 'audit_log_list':
     if (!canAdmin()) out(['error' => 'forbidden']);
@@ -1740,9 +1906,10 @@ case 'staff_create':
     $last = trim(preg_replace('/\s+/u', ' ', (string)($in['last_name'] ?? '')));
     if ($first === '' || $last === '' || mb_strlen($first) > 100 || mb_strlen($last) > 100) out(['ok' => false, 'msg' => 'Le prénom et le nom sont obligatoires et ne doivent pas dépasser 100 caractères chacun.']);
     $r = (string)($in['role'] ?? 'formateur');
-    if (!in_array($r, ['admin', 'formateur'], true)) out(['ok' => false, 'msg' => 'Rôle invalide.']);
+    if (!in_array($r, ['admin', 'formateur', 'lecture'], true)) out(['ok' => false, 'msg' => 'Rôle invalide.']);
     $formations = is_array($in['formations'] ?? null) ? $in['formations'] : [];
     $formations = array_values(array_filter($formations, function($f){ return is_string($f) && $f !== ''; }));
+    if ($r === 'lecture') $formations = [];
     if ($r === 'formateur' && count($formations) === 0) out(['ok' => false, 'msg' => 'Un formateur doit être affecté à au moins une formation.']);
     $u = generatedStaffUsername($db, $r, $first);
     if ($u === '') out(['ok' => false, 'msg' => 'Impossible de générer un identifiant unique.']);
@@ -1756,13 +1923,13 @@ case 'staff_create':
 case 'staff_update':
     if (!canAdmin()) out(['error' => 'forbidden']);
     $id = filter_var($in['id'] ?? null, FILTER_VALIDATE_INT); $r = (string)($in['role'] ?? ''); $active = !empty($in['active']) ? 1 : 0;
-    if (!$id || !in_array($r, ['admin', 'formateur'], true)) out(['ok' => false, 'msg' => 'Paramètres invalides.']);
+    if (!$id || !in_array($r, ['admin', 'formateur', 'lecture'], true)) out(['ok' => false, 'msg' => 'Paramètres invalides.']);
     $beforeQuery = $db->prepare('SELECT username,role,active,first_name,last_name FROM staff WHERE id=?'); $beforeQuery->execute([$id]); $before = $beforeQuery->fetch(PDO::FETCH_ASSOC);
     if (!$before) out(['error' => 'not_found']);
     if (hash_equals((string)($_SESSION['staff_username'] ?? ''), (string)$before['username'])) out(['error' => 'forbidden', 'msg' => 'Vous ne pouvez pas modifier votre propre compte d’administrateur.']);
     $beforeFormationsQuery = $db->prepare('SELECT formation_id FROM staff_formations WHERE staff_id=? ORDER BY formation_id'); $beforeFormationsQuery->execute([$id]); $beforeFormations = array_column($beforeFormationsQuery->fetchAll(PDO::FETCH_ASSOC), 'formation_id');
-    $formationsProvided = is_array($in['formations'] ?? null);
-    $formations = $formationsProvided ? array_values(array_unique(array_filter($in['formations'], function($f){ return is_string($f) && $f !== ''; }))) : $beforeFormations;
+    $formationsProvided = is_array($in['formations'] ?? null) || $r === 'lecture';
+    $formations = $r === 'lecture' ? [] : ($formationsProvided ? array_values(array_unique(array_filter($in['formations'], function($f){ return is_string($f) && $f !== ''; }))) : $beforeFormations);
     if ($r === 'formateur' && count($formations) === 0) out(['ok' => false, 'msg' => 'Un formateur doit être affecté à au moins une formation.']);
     $validFormation = $db->prepare('SELECT 1 FROM formations WHERE id=? AND active=1');
     foreach ($formations as $fid) { $validFormation->execute([(string)$fid]); if (!$validFormation->fetchColumn()) out(['ok' => false, 'msg' => 'Une formation attribuée n’est pas disponible.']); }

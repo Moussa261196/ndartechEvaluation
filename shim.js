@@ -20,7 +20,7 @@
       headers: headers,
       body: JSON.stringify(body || {})
     }).then(function (r) { return r.text(); }).then(function (t) {
-      try { return JSON.parse(t); }
+      try { var response = JSON.parse(t); if (response.csrf_token) csrfToken = response.csrf_token; return response; }
       catch (e) {
         if (retried) throw new Error("reponse_invalide");
         return renewCookie().then(function () { return API(a, body, true); });

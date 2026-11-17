@@ -730,6 +730,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <button id="navDashboard" type="button" data-p="pD" aria-current="page"><i class="bi bi-speedometer2" aria-hidden="true"></i>Vue d’ensemble</button>
     <button id="navLearners" type="button" data-p="pA"><i class="bi bi-people" aria-hidden="true"></i>Apprenants</button>
     <button id="navResults" type="button" data-p="pR"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Résultats des tests</button>
+    <button id="navPedagogy" type="button" data-p="pL" hidden><i class="bi bi-journal-richtext" aria-hidden="true"></i>Suivi pédagogique</button>
     <button id="navGrades" type="button" data-p="pN"><i class="bi bi-award" aria-hidden="true"></i>Notes & évaluations</button>
     <button id="navRanking" type="button" data-p="pC"><i class="bi bi-trophy" aria-hidden="true"></i>Classement</button>
     <button id="navTests" type="button" data-p="pT"><i class="bi bi-journal-check" aria-hidden="true"></i>Tests & examens</button>
@@ -749,6 +750,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <button type="button" class="btn btn-light" data-staff-goto="pR"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Consulter les résultats</button>
       <button type="button" class="btn btn-light" data-staff-goto="pN"><i class="bi bi-award" aria-hidden="true"></i>Consulter les notes</button>
       <button type="button" class="btn btn-light" data-staff-goto="pT"><i class="bi bi-journal-check" aria-hidden="true"></i>Gérer les tests et examens</button>
+      <button type="button" class="btn btn-light" data-staff-goto="pL" hidden><i class="bi bi-journal-richtext" aria-hidden="true"></i>Suivre la progression et consulter les corrigés</button>
       <button type="button" class="btn btn-light" data-staff-goto="pS" data-staff-admin><i class="bi bi-person-gear" aria-hidden="true"></i>Gérer les comptes</button>
     </div>
   </div>
@@ -784,6 +786,29 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <div id="serverResults" class="staff-result-list"></div>
 <h3 style="margin-top:24px">Tentatives et statuts</h3>
 <div class="staff-result-list" id="tvResults"></div>
+</div>
+<div class="sp staff-panel card shadow-sm" id="pL" hidden>
+  <h2><i class="bi bi-journal-richtext me-2" aria-hidden="true"></i>Suivi pédagogique</h2>
+  <p class="muted">Consultation en lecture seule de la progression, des formations et des corrigés.</p>
+  <section class="staff-section-card">
+    <h3><i class="bi bi-graph-up-arrow me-2" aria-hidden="true"></i>Progression des apprenants</h3>
+    <p id="readerProgressStatus" class="muted" role="status" aria-live="polite"></p>
+    <div id="readerProgressTable" class="wrap"></div>
+  </section>
+  <section class="staff-section-card">
+    <h3><i class="bi bi-mortarboard me-2" aria-hidden="true"></i>Formations et modules</h3>
+    <div id="readerFormationOverview" class="staff-grade-list"></div>
+  </section>
+  <section class="staff-section-card">
+    <h3><i class="bi bi-patch-check me-2" aria-hidden="true"></i>Questions et bonnes réponses</h3>
+    <div class="row g-3 mb-3">
+      <div class="col-md-6"><label class="form-label" for="readerFormationSelect">Formation</label><select class="form-select" id="readerFormationSelect"></select></div>
+      <div class="col-md-6"><label class="form-label" for="readerModuleSelect">Module</label><select class="form-select" id="readerModuleSelect"></select></div>
+    </div>
+    <button id="readerQuestionsRefresh" class="btn btn-outline-primary mb-3" type="button"><i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Actualiser les questions</button>
+    <p id="readerQuestionsStatus" class="muted" role="status" aria-live="polite"></p>
+    <div id="readerQuestionList" class="staff-result-list"></div>
+  </section>
 </div>
 <div class="sp staff-panel card shadow-sm" id="pT" hidden>
 <h2><i class="bi bi-journal-check me-2" aria-hidden="true"></i>Tests & examens</h2>
@@ -887,15 +912,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <p>Les administrateurs gèrent toute la plateforme. Les formateurs administrent uniquement leurs apprenants, leurs formations attribuées et leurs résultats.</p>
 <div class="row g-3">
   <div class="col-md-6"><label class="form-label" for="staffUser">Prénom et nom</label><input class="form-control" id="staffUser" type="text" autocomplete="name" placeholder="Ex. Moussa Fall"></div>
-  <div class="col-md-6"><label class="form-label" for="staffRole">Rôle</label><select class="form-select" id="staffRole"><option value="formateur">Formateur</option><option value="admin">Administrateur</option></select></div>
+  <div class="col-md-6"><label class="form-label" for="staffRole">Rôle</label><select class="form-select" id="staffRole"><option value="formateur">Formateur</option><option value="lecture">Lecteur pédagogique</option><option value="admin">Administrateur</option></select></div>
 </div>
-<p class="muted mt-2">Identifiant automatique à partir du prénom : <b>F_moussa</b> pour un formateur ou <b>A_admin</b> pour un administrateur. Un numéro sera ajouté si cet identifiant existe déjà.</p>
+<p class="muted mt-2">Identifiant automatique à partir du prénom : <b>F_moussa</b> pour un formateur, <b>L_moussa</b> pour un lecteur pédagogique ou <b>A_admin</b> pour un administrateur. Un numéro sera ajouté si cet identifiant existe déjà.</p>
 <fieldset class="mt-3" aria-describedby="staffFormationsHelp"><legend class="float-none w-auto px-2 fs-6">Formations attribuées</legend>
   <div class="form-check"><input type="checkbox" class="form-check-input trainerFormation" id="staffFormationOffice" value="bureautique"><label class="form-check-label" for="staffFormationOffice">Bureautique</label></div>
   <div class="form-check"><input type="checkbox" class="form-check-input trainerFormation" id="staffFormationWeb" value="developpement-web"><label class="form-check-label" for="staffFormationWeb">Développement web</label></div>
   <div class="form-check"><input type="checkbox" class="form-check-input trainerFormation" id="staffFormationDesign" value="infographie"><label class="form-check-label" for="staffFormationDesign">Infographie</label></div>
 </fieldset>
-<p id="staffFormationsHelp" class="muted small mt-2">Au moins une formation est requise pour un formateur. Pour un administrateur, cette attribution est facultative.</p>
+<p id="staffFormationsHelp" class="muted small mt-2">Au moins une formation est requise pour un formateur. Elle est facultative pour un administrateur et non applicable au lecteur pédagogique.</p>
 <div class="d-flex flex-wrap gap-2 mt-3"><button id="staffCreate" class="btn btn-primary" type="button"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Ajouter cet utilisateur</button></div>
 <p class="msg" id="staffMsg" role="status" aria-live="polite"></p>
 <p class="msg mb-2" id="staffListMsg" role="status" aria-live="polite"></p>
@@ -1834,7 +1859,39 @@ async function refreshDynamicResults(){
     box.append(h("p",{class:"staff-empty",role:"alert",text:status.textContent}));
   }
 }
-async function startLive(){await Promise.all([refreshDynamicResults(),loadLearners()])}
+async function loadReaderAttempts(){
+  var box=$("#tvResults");box.textContent="";box.setAttribute("aria-busy","true");
+  box.append(h("p",{class:"staff-empty",role:"status","aria-live":"polite",text:"Chargement des tentatives…"}));
+  try{
+    var response=await API("reader_attempts_list",{});
+    if(!response||response.error||!Array.isArray(response.rows))throw new Error("reader_attempts_unavailable");
+    box.textContent="";
+    box.setAttribute("aria-busy","false");
+    if(!response.rows.length){box.append(h("p",{class:"staff-empty",role:"status",text:"Aucune tentative enregistrée pour le moment."}));return}
+    var labels={started:"En cours",submitted:"Terminée",expired:"Expirée",cancelled:"Annulée"};
+    response.rows.forEach(function(row){
+      var date=String(row.submitted_at||row.started_at||"").replace("T"," ").slice(0,16)||"—";
+      var result=row.status==="submitted"?Number(row.score||0)+" / "+Number(row.total||0)+" points · "+Number(row.percentage||0)+" %":(labels[row.status]||row.status);
+      box.append(h("article",{class:"staff-result-card"},
+        h("div",{class:"staff-result-header"},h("h4",{text:row.learner_name||"Apprenant"}),h("span",{class:"muted",text:date})),
+        h("div",{class:"staff-result-facts"},
+          h("div",{},h("span",{class:"staff-result-label",text:"Formation"}),h("strong",{text:row.formation_name||"—"})),
+          h("div",{},h("span",{class:"staff-result-label",text:"Test"}),h("strong",{text:(row.level_name||row.module_name||"Test")+" · "+learnerModeLabel(row.mode)})),
+          h("div",{},h("span",{class:"staff-result-label",text:"Résultat / statut"}),h("strong",{text:result}))
+        )
+      ));
+    });
+  }catch(error){
+    console.error("loadReaderAttempts error:",error);
+    box.textContent="";box.setAttribute("aria-busy","false");
+    box.append(h("p",{class:"staff-empty",role:"alert",text:"Impossible de charger les tentatives. Vérifiez la connexion puis réessayez."}));
+  }
+}
+async function startLive(){
+  var tasks=[refreshDynamicResults()];
+  if(STAFF_ROLE!=="lecture")tasks.push(loadLearners());
+  await Promise.all(tasks);
+}
 $("#resultsRefresh").onclick=refreshDynamicResults;
 $("#resultsCsv").onclick=function(){
   var rows=[["Apprenant","Formation","Module","Mode","Score","Total","Pourcentage","Durée (s)","Date"].map(qq).join(";")];
@@ -1851,11 +1908,11 @@ async function refreshDashboard(){
     var r = await API("admin_dashboard", {});
     if (!r || r.error) throw new Error("dashboard_unavailable");
     var box = $("#dashStats");
-    if (box) { box.textContent = ""; [["Apprenants actifs", r.learner_count || 0, "people"], [STAFF_ROLE==="admin"?"Formations actives":"Formations attribuées", r.formation_count || 0, "mortarboard"], ["Modules actifs", r.module_count || 0, "collection"], ["Tests réalisés", r.test_count || 0, "check2-square"]].forEach(function (c) { box.append(h("div", { class: "staff-stat col card h-100 shadow-sm" }, h("div", { class: "card-body" }, h("i", { class: "bi bi-" + c[2] + " staff-stat-icon", "aria-hidden": "true" }), h("strong", { text: String(c[1]) }), h("span", { text: c[0] })))); }); }
+    if (box) { box.textContent = ""; [["Apprenants actifs", r.learner_count || 0, "people"], [STAFF_ROLE==="admin"||STAFF_ROLE==="lecture"?"Formations actives":"Formations attribuées", r.formation_count || 0, "mortarboard"], ["Modules actifs", r.module_count || 0, "collection"], ["Tests réalisés", r.test_count || 0, "check2-square"]].forEach(function (c) { box.append(h("div", { class: "staff-stat col card h-100 shadow-sm" }, h("div", { class: "card-body" }, h("i", { class: "bi bi-" + c[2] + " staff-stat-icon", "aria-hidden": "true" }), h("strong", { text: String(c[1]) }), h("span", { text: c[0] })))); }); }
     var rec = $("#dashRecent");
     if (rec) { rec.textContent = ""; var rows = r.latest || []; if (!rows.length) { rec.append(h("div", { class: "staff-empty", text: "Aucun résultat récent. Les résultats apparaîtront ici après les premières évaluations." })); } else { var bd = h("tbody"); rows.forEach(function (e) { bd.append(h("tr", {}, h("td", { text: e.learner_name || "" }), h("td", { text: e.formation_id || "" }), h("td", { text: (e.score || 0) + "/" + (e.total || 0) + " (" + (e.percentage || 0) + " %)" }), h("td", { text: String(e.created || "").slice(0, 16).replace("T", " ") }))); }); var recentTable = prepareResponsiveTable(h("table", { class: "staff-data-table" }, h("thead", {}, h("tr", {}, ["Apprenant", "Formation", "Score", "Date"].map(function (t) { return h("th", { text: t }); }))), bd)); rec.append(h("div", { class: "wrap" }, recentTable)); } }
     var cbox = $("#dashCredentials");
-    if (cbox) { cbox.textContent = ""; var sarr = []; try { sarr = JSON.parse(localStorage.getItem("ndartech_staff_created") || "[]"); } catch (e) { } var larr = []; try { larr = JSON.parse(localStorage.getItem("ndartech_learner_created") || "[]"); } catch (e) { } var all = sarr.concat(larr); if (!all.length) { cbox.append(h("p", { class: "muted", text: "Aucun identifiant créé sur cet appareil." })); } else { all.slice(0, 5).forEach(function (o) { if (!o) return; var identifier = o.username || o.identifier; if (!identifier) return; cbox.append(h("div", { class: "staff-stat card shadow-sm mb-2" }, h("div", { class: "card-body" }, h("strong", { text: o.name || identifier }), h("span", { text: (o.role ? o.role + " · " : "") + "Identifiant : " + identifier })))); }); } }
+    if (cbox && STAFF_ROLE!=="lecture") { cbox.textContent = ""; var sarr = []; try { sarr = JSON.parse(localStorage.getItem("ndartech_staff_created") || "[]"); } catch (e) { } var larr = []; try { larr = JSON.parse(localStorage.getItem("ndartech_learner_created") || "[]"); } catch (e) { } var all = sarr.concat(larr); if (!all.length) { cbox.append(h("p", { class: "muted", text: "Aucun identifiant créé sur cet appareil." })); } else { all.slice(0, 5).forEach(function (o) { if (!o) return; var identifier = o.username || o.identifier; if (!identifier) return; cbox.append(h("div", { class: "staff-stat card shadow-sm mb-2" }, h("div", { class: "card-body" }, h("strong", { text: o.name || identifier }), h("span", { text: (o.role ? o.role + " · " : "") + "Identifiant : " + identifier })))); }); } }
   } catch (e) { console.error("refreshDashboard error:", e); var b = $("#dashStats"); if (b) b.textContent = ""; if (b) b.append(h("div", { class: "staff-empty", role: "alert", text: "Impossible de charger le tableau de bord. Vérifiez la connexion puis réessayez." })); }
 }
 
@@ -1872,7 +1929,7 @@ async function renderStaff(){
     var table=h("table",{class:"staff-data-table staff-account-table"},h("thead",{},h("tr",{},headers.map(function(title){return h("th",{text:title})}))),body);
     (response.rows||[]).forEach(function(user){
       var role=h("select",{"aria-label":"Rôle de "+user.username});
-      [["admin","Administrateur"],["formateur","Formateur"]].forEach(function(item){role.append(h("option",{value:item[0],text:item[1]}))});
+      [["admin","Administrateur"],["formateur","Formateur"],["lecture","Lecteur pédagogique"]].forEach(function(item){role.append(h("option",{value:item[0],text:item[1]}))});
       role.value=user.role;
       var active=h("button",{type:"button",class:user.active==1?"alt":"","aria-label":(user.active==1?"Désactiver ":"Activer ")+user.username,text:user.active==1?"Désactiver":"Activer"});
       var remove=h("button",{type:"button",class:"alt",text:"Supprimer"});
@@ -1915,17 +1972,123 @@ async function renderStaff(){
     staffList.append(h("div",{class:"wrap"},prepareResponsiveTable(table)));
   }catch(error){console.error("renderStaff error:",error);var staffList=$("#staffList");staffList.textContent="";staffList.append(h("div",{class:"staff-empty",role:"alert",text:"Impossible de charger la liste. Vérifiez la connexion, puis réessayez."}))}
 }
+var READER_FORMATIONS=[],readerQuestionRequest=0;
+async function loadReaderProgress(){
+  var status=$("#readerProgressStatus"),box=$("#readerProgressTable");
+  status.textContent="Chargement de la progression…";box.textContent="";
+  try{
+    var response=await API("reader_progress_list",{});
+    if(!response||response.error||!Array.isArray(response.rows))throw new Error("reader_progress_unavailable");
+    if(!response.rows.length){status.textContent="Aucun apprenant enregistré.";return}
+    var head=["Apprenant","Formation","Progression","Tests terminés","Moyenne des tests","Dernière activité","Compte"],body=h("tbody");
+    response.rows.forEach(function(row){
+      var total=Number(row.total_levels)||0,validated=Number(row.validated_levels)||0;
+      var progress=total?Math.round(validated*100/total)+" %":"—";
+      var average=row.average_percentage===null||row.average_percentage===undefined?"—":Number(row.average_percentage)+" %";
+      var last=String(row.last_activity||"").replace("T"," ").slice(0,16)||"—";
+      var values=[row.learner_name,row.formation_name,validated+" / "+total+" · "+progress,Number(row.submitted_attempts)||0,average,last,Number(row.active)===1?"Actif":"Désactivé"];
+      var cells=values.map(function(value){return h("td",{text:String(value==null?"—":value)})});
+      cells.forEach(function(cell,index){cell.setAttribute("data-label",head[index])});
+      body.append(h("tr",{},cells));
+    });
+    box.append(prepareResponsiveTable(h("table",{class:"staff-data-table"},h("thead",{},h("tr",{},head.map(function(title){return h("th",{text:title})}))),body)));
+    status.textContent=response.rows.length+" apprenant(s) affiché(s), sans identifiants de connexion.";
+  }catch(error){
+    console.error("loadReaderProgress error:",error);
+    status.textContent="Impossible de charger la progression. Vérifiez la connexion puis réessayez.";
+    box.append(h("p",{class:"staff-empty",role:"alert",text:status.textContent}));
+  }
+}
+function populateReaderModules(){
+  var formation=READER_FORMATIONS.find(function(item){return item.id===$("#readerFormationSelect").value});
+  var select=$("#readerModuleSelect"),current=select.value;
+  select.textContent="";
+  select.append(h("option",{value:"",text:"Tous les modules"}));
+  (formation?formation.modules||[]:[]).forEach(function(module){select.append(h("option",{value:module.id,text:module.name}))});
+  if(current&&(formation||{}).modules&&formation.modules.some(function(module){return module.id===current}))select.value=current;
+}
+async function loadReaderQuestions(){
+  var box=$("#readerQuestionList"),status=$("#readerQuestionsStatus"),request=++readerQuestionRequest;
+  var formationId=$("#readerFormationSelect").value,moduleId=$("#readerModuleSelect").value;
+  box.textContent="";
+  if(!formationId){status.textContent="Aucune formation active n’est disponible.";return}
+  status.textContent="Chargement des questions…";
+  try{
+    var response=await API("pedagogical_questions_list",{formation_id:formationId,module_id:moduleId});
+    if(request!==readerQuestionRequest)return;
+    if(!response||response.error||!Array.isArray(response.questions))throw new Error("reader_questions_unavailable");
+    if(!response.questions.length){status.textContent="Aucune question active pour ce filtre.";return}
+    response.questions.forEach(function(question,index){
+      var answers=h("ul",{class:"list-group list-group-flush"});
+      (question.answers||[]).forEach(function(answer){
+        answers.append(h("li",{class:"list-group-item d-flex justify-content-between align-items-start gap-2"},
+          h("span",{text:answer.answer}),
+          h("span",{class:"badge "+(answer.is_correct?"text-bg-success":"text-bg-secondary"),text:answer.is_correct?"Bonne réponse":"Réponse proposée"})
+        ));
+      });
+      var card=h("article",{class:"staff-result-card"},
+        h("div",{class:"staff-result-header"},h("h4",{text:"Question "+(index+1)+" · "+question.question}),h("span",{class:"muted",text:Number(question.points||1)+" point(s)"})),
+        h("p",{class:"small text-body-secondary",text:[question.formation_name,question.module_name,question.level_name].filter(Boolean).join(" · ")}),
+        answers
+      );
+      if(question.explanation)card.append(h("p",{class:"small text-body-secondary mt-2 mb-0",text:"Explication : "+question.explanation}));
+      box.append(card);
+    });
+    status.textContent=response.questions.length+" question(s) affichée(s). Les bonnes réponses sont signalées en vert.";
+  }catch(error){
+    if(request!==readerQuestionRequest)return;
+    console.error("loadReaderQuestions error:",error);
+    status.textContent="Impossible de charger les questions. Vérifiez la connexion puis réessayez.";
+    box.append(h("p",{class:"staff-empty",role:"alert",text:status.textContent}));
+  }
+}
+async function loadReaderPedagogy(){
+  await loadReaderProgress();
+  var overview=$("#readerFormationOverview");
+  overview.textContent="";
+  try{
+    var response=await API("formations_list",{});
+    if(!response||response.error||!Array.isArray(response.formations))throw new Error("reader_formations_unavailable");
+    READER_FORMATIONS=response.formations;
+    if(!READER_FORMATIONS.length)overview.append(h("p",{class:"staff-empty",text:"Aucune formation active."}));
+    READER_FORMATIONS.forEach(function(formation){
+      var modules=h("ul",{class:"list-group list-group-flush"});
+      (formation.modules||[]).forEach(function(module){modules.append(h("li",{class:"list-group-item"},h("strong",{text:module.name}),module.description?h("span",{class:"d-block small text-body-secondary",text:module.description}):null))});
+      overview.append(h("article",{class:"staff-grade-card"},h("div",{class:"staff-grade-header"},h("h4",{text:formation.name}),h("span",{class:"muted",text:(formation.modules||[]).length+" module(s)"})),h("p",{class:"muted",text:formation.description||""}),modules));
+    });
+    var select=$("#readerFormationSelect"),previous=select.value;
+    select.textContent="";
+    READER_FORMATIONS.forEach(function(formation){select.append(h("option",{value:formation.id,text:formation.name}))});
+    if(previous&&READER_FORMATIONS.some(function(item){return item.id===previous}))select.value=previous;
+    populateReaderModules();
+    await loadReaderQuestions();
+  }catch(error){
+    console.error("loadReaderPedagogy error:",error);
+    overview.append(h("p",{class:"staff-empty",role:"alert",text:"Impossible de charger les formations. Vérifiez la connexion puis réessayez."}));
+  }
+}
+$("#readerFormationSelect").onchange=function(){populateReaderModules();loadReaderQuestions()};
+$("#readerModuleSelect").onchange=loadReaderQuestions;
+$("#readerQuestionsRefresh").onclick=loadReaderQuestions;
 function applyStaffRole(){
-  var canCreateLearners=STAFF_ROLE==="formateur",isAdmin=STAFF_ROLE==="admin";
+  var canCreateLearners=STAFF_ROLE==="formateur",isAdmin=STAFF_ROLE==="admin",isReader=STAFF_ROLE==="lecture";
   $("#mk").disabled=!canCreateLearners;$("#names").disabled=!canCreateLearners;$("#learnerCreationForm").hidden=!canCreateLearners;
   $("#staffAdmin").hidden=!isAdmin;$("#backupGo").hidden=!isAdmin;$("#navLearners").hidden=!(canCreateLearners||isAdmin);
-  $("#navResults").hidden=false;$("#navAnswerKey").hidden=false;$("#navSecurity").hidden=false;
-  $("#staffRoleLabel").textContent=isAdmin?"Administration générale":"Espace formateur";
-  $("#staffGreeting").textContent=isAdmin?"Bonjour, administrateur":"Bonjour, formateur";
-  $("#staffContext").textContent=isAdmin?"Vue globale de la plateforme et de ses utilisateurs.":"Suivi de vos apprenants et des formations qui vous sont attribuées.";
-  $("#dashWelcomeTitle").textContent=isAdmin?"Bienvenue dans l’administration":"Bienvenue dans votre espace formateur";
-  $("#dashWelcomeText").textContent=isAdmin?"Pilotez les comptes, les formations et l’activité pédagogique de la plateforme.":"Suivez la progression de vos apprenants et gérez leurs tests en un seul endroit.";
-  $("#tabTrainer").textContent=isAdmin?"Espace d’administration":"Espace formateur";
+  $("#navResults").hidden=false;$("#navGrades").hidden=false;$("#navRanking").hidden=false;$("#navTests").hidden=isReader;$("#navSecurity").hidden=false;$("#navAnswerKey").hidden=isReader;$("#navPedagogy").hidden=!isReader;
+  $("#staffRoleLabel").textContent=isAdmin?"Administration générale":isReader?"Espace lecteur pédagogique":"Espace formateur";
+  $("#staffGreeting").textContent=isAdmin?"Bonjour, administrateur":isReader?"Bonjour, lecteur pédagogique":"Bonjour, formateur";
+  $("#staffContext").textContent=isAdmin?"Vue globale de la plateforme et de ses utilisateurs.":isReader?"Consultation en lecture seule des résultats, de la progression, des formations et des corrigés.":"Suivi de vos apprenants et des formations qui vous sont attribuées.";
+  $("#dashWelcomeTitle").textContent=isAdmin?"Bienvenue dans l’administration":isReader?"Bienvenue dans l’espace pédagogique":"Bienvenue dans votre espace formateur";
+  $("#dashWelcomeText").textContent=isAdmin?"Pilotez les comptes, les formations et l’activité pédagogique de la plateforme.":isReader?"Consultez les résultats, la progression des apprenants, les formations et les bonnes réponses.":"Suivez la progression de vos apprenants et gérez leurs tests en un seul endroit.";
+  $("#tabTrainer").textContent=isAdmin?"Espace d’administration":isReader?"Espace lecteur pédagogique":"Espace formateur";
+  $("#dashCredentialsSection").hidden=isReader;
+  document.querySelectorAll('[data-staff-goto="pA"],[data-staff-goto="pT"]').forEach(function(button){button.hidden=isReader});
+  document.querySelectorAll('[data-staff-goto="pL"]').forEach(function(button){button.hidden=!isReader});
+  document.querySelector("#pN h3").hidden=isReader;
+  $("#gradeLearner").parentElement.hidden=isReader;
+  document.querySelector("#pN .staff-project-grade").hidden=isReader;
+  $("#projectGradeMsg").hidden=isReader;
+  $("#backupGo").parentElement.parentElement.hidden=!isAdmin;
   document.querySelectorAll("[data-staff-admin]").forEach(function(button){button.hidden=!isAdmin});
   document.querySelectorAll("#subnav button").forEach(function(button){
     var active=button.dataset.p==="pD";setButtonVariant(button,active);
@@ -1951,6 +2114,13 @@ $("#staffCreate").onclick=async function(){
  }catch(e){m.textContent="Création impossible pour le moment."}
  finally{button.disabled=false}
 };
+function syncStaffFormationFields(){
+  var reader=$("#staffRole").value==="lecture",fieldset=$("#staffFormationOffice").parentElement.parentElement;
+  fieldset.hidden=reader;
+  document.querySelectorAll(".trainerFormation").forEach(function(input){input.disabled=reader;if(reader)input.checked=false});
+}
+$("#staffRole").onchange=syncStaffFormationFields;
+syncStaffFormationFields();
 $("#adminPwdGo").onclick=async function(){var button=this,m=$("#adminPwdMsg");m.textContent="Modification en cours…";button.disabled=true;try{var r=await API("change_password",{current:$("#adminCurrent").value,new:$("#adminNew").value,confirm:$("#adminConfirm").value});if(!r.ok){m.textContent=r.msg||"Modification impossible.";return}$("#adminCurrent").value="";$("#adminNew").value="";$("#adminConfirm").value="";m.textContent="Mot de passe modifié avec succès."}catch(e){m.textContent="Modification impossible pour le moment."}finally{button.disabled=false}};
 $("#backupGo").onclick=async function(){var button=this,m=$("#backupMsg");button.disabled=true;m.textContent="Création en cours…";try{var r=await API("backup",{});m.textContent=r.ok?"Sauvegarde créée : "+r.file:(r.msg||"Sauvegarde impossible.")}catch(e){m.textContent="Sauvegarde impossible pour le moment."}finally{button.disabled=false}};
 var IDS=[];
@@ -1990,8 +2160,10 @@ document.querySelectorAll("#subnav button").forEach(function(b){b.onclick=functi
   document.querySelectorAll(".sp").forEach(function(panel){panel.hidden=panel.id!==b.dataset.p});
   document.querySelectorAll("#subnav button").forEach(function(button){var active=button===b;setButtonVariant(button,active);if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")});
   if(b.dataset.p==="pD")refreshDashboard();
-  if(b.dataset.p==="pR"){refreshDynamicResults();if(window.loadResultsPage)window.loadResultsPage();}
-  if(b.dataset.p==="pN"&&window.loadGradesPage)window.loadGradesPage();
+  if(b.dataset.p==="pR"){refreshDynamicResults();if(STAFF_ROLE==="lecture")loadReaderAttempts();else if(window.loadResultsPage)window.loadResultsPage();}
+  if(b.dataset.p==="pL"&&STAFF_ROLE==="lecture")loadReaderPedagogy();
+  if(b.dataset.p==="pN"&&STAFF_ROLE==="lecture"&&window.loadReadOnlyGrades)window.loadReadOnlyGrades();
+  else if(b.dataset.p==="pN"&&window.loadGradesPage)window.loadGradesPage();
   if(b.dataset.p==="pC"&&window.loadRanking)window.loadRanking();
 }});
 document.querySelectorAll("[data-staff-goto]").forEach(function(button){button.addEventListener("click",function(){var target=document.querySelector('#subnav [data-p="'+button.getAttribute("data-staff-goto")+'"]');if(target&&!target.hidden)target.click()})});
@@ -2085,17 +2257,18 @@ function routeSession(r){
     if(r.formation_id){loadFormations(r.formation_id);showLearnerView("home")}else{$("#formationPicker").hidden=true;$("#learnerFormationName").textContent="Formation non attribuée";$("#resumeCard").textContent="Aucune formation ne vous a été attribuée. Contactez votre formateur."}
     return;
   }
-  if(r.role=== "admin" || r.role=== "formateur"){
+  if(r.role=== "admin" || r.role=== "formateur" || r.role=== "lecture"){
     document.body.classList.remove("learner-mode");
     document.body.classList.add("staff-mode");
-    STAFF_ROLE=r.staff_role||(r.role=== "formateur"?"formateur":"admin");
-    document.getElementById("privateTitle").textContent=STAFF_ROLE=== "formateur"?"Tableau de bord formateur":"Tableau de bord administrateur";
-    document.getElementById("privateSubtitle").textContent=STAFF_ROLE=== "formateur"?"Gestion de vos apprenants et des formations attribuées.":"Gestion complète de la plateforme.";
+    STAFF_ROLE=r.staff_role||(r.role=== "formateur"?"formateur":r.role==="lecture"?"lecture":"admin");
+    document.getElementById("privateTitle").textContent=STAFF_ROLE==="formateur"?"Tableau de bord formateur":STAFF_ROLE==="lecture"?"Espace lecteur pédagogique":"Tableau de bord administrateur";
+    document.getElementById("privateSubtitle").textContent=STAFF_ROLE==="formateur"?"Gestion de vos apprenants et des formations attribuées.":STAFF_ROLE==="lecture"?"Consultation en lecture seule des résultats et ressources pédagogiques.":"Gestion complète de la plateforme.";
     document.getElementById("privateTabs").hidden=true;
     document.getElementById("quizView").hidden=true;
     document.getElementById("trainerView").hidden=false;
     document.getElementById("tcontent").hidden=false;
-    applyStaffRole(); refreshStaff(); refreshDashboard(); populateLearnerFormations(r.formations||[]); renderCreated("staff"); renderCreated("learner");
+    applyStaffRole(); refreshStaff(); refreshDashboard();
+    if(STAFF_ROLE!=="lecture"){populateLearnerFormations(r.formations||[]);renderCreated("staff");renderCreated("learner")}
     document.querySelectorAll(".sp").forEach(function(p){p.hidden=p.id!=="pD"});
     if(typeof startLive=== "function")startLive();
   }
@@ -2117,7 +2290,7 @@ document.getElementById("authModal").addEventListener("keydown",function(event){
 document.getElementById("menuBtn").onclick=function(){var expanded=this.getAttribute("aria-expanded")==="true";this.setAttribute("aria-expanded",String(!expanded));document.getElementById("publicNav").classList.toggle("open",!expanded)};
 document.getElementById("publicNav").addEventListener("click",function(event){if(event.target.closest("a")){document.getElementById("menuBtn").setAttribute("aria-expanded","false");this.classList.remove("open")}});
 document.getElementById("currentYear").textContent=new Date().getFullYear();document.getElementById("forgotBtn").onclick=function(){document.getElementById("authError").textContent="Contactez votre administrateur ou votre formateur pour réinitialiser votre mot de passe."};
-document.getElementById("authLogin").onclick=async function(){var e=document.getElementById("authError");e.textContent="";var identifier=document.getElementById("authEmail").value.trim();var secret=document.getElementById("authPassword").value;if(!identifier||!secret){e.textContent="Entrez votre identifiant ou adresse e-mail, puis votre mot de passe.";return}try{var r=await API("login",{identifier:identifier,password:secret,remember:document.getElementById("rememberMe").checked});if(!r.ok){e.textContent=r.msg||"Identifiant ou mot de passe incorrect.";return}var session={role:r.role||"none",staff_role:r.role=== "formateur"?"formateur":(r.role=== "admin"?"admin":"none"),name:r.name||null,identifier:r.identifier||null,formation_id:r.formation_id||null,must_change_password:!!r.must_change_password,formations:r.formations||[]};document.getElementById("authModal").hidden=true;routeSession(session);await claude.refresh()}catch(x){e.textContent="Connexion impossible pour le moment."}};
+document.getElementById("authLogin").onclick=async function(){var e=document.getElementById("authError");e.textContent="";var identifier=document.getElementById("authEmail").value.trim();var secret=document.getElementById("authPassword").value;if(!identifier||!secret){e.textContent="Entrez votre identifiant ou adresse e-mail, puis votre mot de passe.";return}try{var r=await API("login",{identifier:identifier,password:secret,remember:document.getElementById("rememberMe").checked});if(!r.ok){e.textContent=r.msg||"Identifiant ou mot de passe incorrect.";return}var session={role:r.role||"none",staff_role:["admin","formateur","lecture"].includes(r.role)?r.role:"none",name:r.name||null,identifier:r.identifier||null,formation_id:r.formation_id||null,must_change_password:!!r.must_change_password,formations:r.formations||[]};document.getElementById("authModal").hidden=true;routeSession(session);await claude.refresh()}catch(x){e.textContent="Connexion impossible pour le moment."}};
 document.getElementById("authPasswordToggle").onclick=function(){var input=document.getElementById("authPassword"),show=input.type=== "password";input.type=show?"text":"password";this.textContent=show?"Masquer":"Afficher";this.setAttribute("aria-pressed",String(show));this.setAttribute("aria-label",show?"Masquer le mot de passe":"Afficher le mot de passe")};
 document.getElementById("authEmail").addEventListener("keydown",function(event){if(event.key==="Enter")document.getElementById("authLogin").click()});
 document.getElementById("authPassword").addEventListener("keydown",function(e){if(e.key=== "Enter")document.getElementById("authLogin").click()});
@@ -2499,6 +2672,7 @@ try{if(typeof claude!=="undefined"&&claude.use)claude.use("user").then(u=>{if(u&
   }
   window.loadTests = loadTests;
   window.loadGradesPage = loadGradesPage;
+  window.loadReadOnlyGrades = loadGrades;
   window.loadResultsPage = loadResultsPage;
   $("#navTests").addEventListener("click", function () { loadTests(false); });
   $("#tvLearner").onchange = refreshLevelSelect; $("#gradeLearner").onchange=loadProjectGradeForm; $("#projectGradeSave").onclick=saveProjectGrades; $("#projectGradeWeightsSave").onclick=saveProjectGradeWeights; $("#tvExamLevel").onchange = fillExam; $("#tvExamActive").onchange = syncExamActivationStatus;

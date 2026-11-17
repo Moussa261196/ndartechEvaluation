@@ -8,10 +8,31 @@ if (!defined('SETUP_KEY')) {
     $setupKey = getenv('NDARTECH_SETUP_KEY');
     define('SETUP_KEY', $setupKey !== false ? $setupKey : 'REMPLACEZ-CETTE-CLE');
 }
-const SALT = 'ndartech-c4';
+if (!defined('SALT')) {
+    $envSalt = getenv('NDARTECH_SALT');
+    define('SALT', $envSalt !== false ? $envSalt : 'ndartech-c4');
+    if ($envSalt === false) {
+        error_log('qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut');
+    }
+}
+
+if (!defined('SETUP_KEY')) {
+    $setupKey = getenv('NDARTECH_SETUP_KEY');
+    define('SETUP_KEY', $setupKey !== false ? $setupKey : 'REMPLACEZ-CETTE-CLE');
+}
+if (!defined('SALT')) {
+    $envSalt = getenv('NDARTECH_SALT');
+    define('SALT', $envSalt !== false ? $envSalt : 'ndartech-c4');
+    if ($envSalt === false) {
+        error_log('qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut');
+    }
+}
 
 session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax', 'secure' => !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')]);
 session_start();
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 $inactiveLimit = !empty($_SESSION['admin']) ? 1800 : 7200;
 if (!empty($_SESSION['last_activity']) && time() - (int)$_SESSION['last_activity'] > $inactiveLimit) {
@@ -53,7 +74,71 @@ function out(array $a): void {
     exit;
 }
 function setupKeyReady(): bool { return SETUP_KEY !== 'REMPLACEZ-CETTE-CLE' && strlen(SETUP_KEY) >= 32; }
+
+function checkRateLimit(): void {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $now = time();
+    $windowSeconds = 60;
+    $windowStart = (int)($now / $windowSeconds) * $windowSeconds;
+    $windowStartStr = gmdate('c', $windowStart);
+
+    $db = $GLOBALS['db'] ?? null;
+    if (!($db instanceof PDO)) return;
+
+    // Nettoyage des fenêtres anciennes (plus de 5 minutes)
+    $db->prepare('DELETE FROM rate_limits WHERE window_start < ?')->execute([gmdate('c', $now - 300)]);
+
+    // Identifiants à vérifier : IP par défaut, puis utilisateur connecté
+    $identifiers = ['ip' => $ip];
+
+    if (!empty($_SESSION['uid'])) {
+        $identifiers['learner_uid'] = (string)$_SESSION['uid'];
+    }
+    if (!empty($_SESSION['staff_username'])) {
+        $identifiers['staff_id'] = (string)$_SESSION['staff_username'];
+    }
+
+    // Limites par type d'identifiant (requêtes/minute)
+    $limits = [
+        'ip' => 60,
+        'learner_uid' => 30,
+        'staff_id' => 20,
+    ];
+
+    // Exemptions : ces endpoints ne sont pas soumis au rate limiting
+    $exemptEndpoints = ['whoami', 'install', 'public_settings', 'login'];
+    $a = $_GET['a'] ?? '';
+    if (in_array($a, $exemptEndpoints)) return;
+
+    // Pour chaque identifiant présent, vérifier la limite
+    foreach ($identifiers as $key => $id) {
+        $limit = $limits[$key] ?? 60;
+        $s = $db->prepare('SELECT count FROM rate_limits WHERE subject_type=? AND subject_id=? AND window_start=?');
+        $s->execute([$key, (string)$id, $windowStartStr]);
+        $row = $s->fetchColumn();
+        $count = $row !== false ? (int)$row : 0;
+
+        if ($count >= $limit) {
+            http_response_code(429);
+            $msg = match($key) {
+                'ip' => 'Trop de requêtes depuis cette adresse IP. Veuillez patienter avant de réessayer.',
+                'learner_uid' => 'Trop de requêtes pour votre compte. Veuillez patienter avant de réessayer.',
+                'staff_id' => 'Trop de requêtes pour votre compte formateur. Veuillez patienter avant de réessayer.',
+            };
+            out(['error' => 'attempts_cooldown', 'msg' => $msg]);
+            return; // arrêt dès le premier dépassement
+        }
+
+        if ($row === false) {
+            $db->prepare('INSERT INTO rate_limits(subject_type, subject_id, count, window_start) VALUES(?,?,1,?)')->execute([$key, (string)$id, $windowStartStr]);
+        } else {
+            $db->prepare('UPDATE rate_limits SET count=count+1 WHERE subject_type=? AND subject_id=? AND window_start=?')->execute([$key, (string)$id, $windowStartStr]);
+        }
+    }
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'qcm') out(['error' => 'bad_request']);
+
 
 $dir = __DIR__ . '/data';
 if (!is_dir($dir)) {
@@ -110,6 +195,22 @@ $db->exec('CREATE TABLE IF NOT EXISTS exam_configs(id TEXT PRIMARY KEY, formatio
 $db->exec('CREATE TABLE IF NOT EXISTS formation_exam_configs(formation_id TEXT PRIMARY KEY, active INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT "desactive" CHECK(state IN ("desactive","programme","actif","ferme","termine")), starts_at TEXT, closes_at TEXT, attempts_allowed INTEGER NOT NULL DEFAULT 1, pass_percent INTEGER NOT NULL DEFAULT 90, correction_mode TEXT NOT NULL DEFAULT "manuel" CHECK(correction_mode IN ("immediate","programme","manuel")), correction_at TEXT, correction_published INTEGER NOT NULL DEFAULT 0, updated_by TEXT NOT NULL DEFAULT "", updated_at TEXT NOT NULL)');
 $db->exec('CREATE TABLE IF NOT EXISTS trainer_actions(id INTEGER PRIMARY KEY AUTOINCREMENT, trainer_staff_id INTEGER NOT NULL, action TEXT NOT NULL, learner_uid TEXT NOT NULL, level_id TEXT, module_id TEXT, details TEXT NOT NULL DEFAULT "", created_at TEXT NOT NULL)');
 $db->exec('CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, actor_staff_id INTEGER NOT NULL DEFAULT 0, actor_username TEXT NOT NULL DEFAULT "", actor_role TEXT NOT NULL, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT NOT NULL DEFAULT "", details TEXT NOT NULL DEFAULT "{}", created_at TEXT NOT NULL)');
+$db->exec('CREATE TABLE IF NOT EXISTS rate_limits(subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, window_start TEXT NOT NULL, PRIMARY KEY(subject_type, subject_id, window_start))');
+$rateLimitColumns = array_column($db->query('PRAGMA table_info(rate_limits)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+if (!in_array('subject_type', $rateLimitColumns, true)) {
+    if (!in_array('ip', $rateLimitColumns, true)) throw new RuntimeException('Unsupported rate_limits table schema');
+    $db->beginTransaction();
+    try {
+        $db->exec('CREATE TABLE rate_limits_v2(subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, window_start TEXT NOT NULL, PRIMARY KEY(subject_type, subject_id, window_start))');
+        $db->exec("INSERT INTO rate_limits_v2(subject_type,subject_id,count,window_start) SELECT 'ip',ip,count,window_start FROM rate_limits");
+        $db->exec('DROP TABLE rate_limits');
+        $db->exec('ALTER TABLE rate_limits_v2 RENAME TO rate_limits');
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
+}
 $db->exec('CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC)');
 try { $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_attempt_number ON test_attempts(learner_uid,level_id,mode,attempt_number) WHERE mode<>'entrainement'"); } catch (PDOException $e) {}
 $db->exec("CREATE INDEX IF NOT EXISTS idx_test_attempts_learner ON test_attempts(learner_uid,formation_id,module_id,level_id,mode,status)");
@@ -382,6 +483,8 @@ $photoshopExtra=[
 ['Pourquoi utiliser les calques ?','Modifier les éléments séparément sans écraser le reste','Réduire la résolution automatiquement','Ajouter des formules Excel','Changer l’extension en PDF','Les calques permettent des retouches indépendantes et réversibles.']];
 ensureTwentyQuestions($db,'photoshop',$photoshopExtra);
 
+checkRateLimit();
+
 $in = json_decode(file_get_contents('php://input'), true);
 if (!is_array($in)) $in = [];
 $a = $_GET['a'] ?? '';
@@ -403,14 +506,20 @@ function mkid(string $n): string { return 'AP-' . hs(nm($n) . '|id|' . SALT); }
 function staffRole(): string { return !empty($_SESSION['staff_role']) ? (string)$_SESSION['staff_role'] : 'none'; }
 function role(): string {
     if (!empty($_SESSION['uid'])) return 'learner';
-    if (empty($_SESSION['admin'])) return 'none';
+    if (empty($_SESSION['admin'])) {
+        // Formateurs connectés sans admin (après correction)
+        if (!empty($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'formateur') return 'formateur';
+        // Administrateurs connectés
+        if (!empty($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'admin') return 'admin';
+        return 'none';
+    }
     $staffRole = staffRole();
     return $staffRole === 'formateur' ? 'formateur' : ($staffRole === 'admin' ? 'admin' : 'none');
 }
-function canManage(): bool { return !empty($_SESSION['admin']) && in_array(staffRole(), ['admin', 'formateur'], true); }
-function canTrainer(): bool { return !empty($_SESSION['admin']) && staffRole() === 'formateur'; }
+function canManage(): bool { return in_array(staffRole(), ['admin', 'formateur'], true); }
+function canTrainer(): bool { return staffRole() === 'formateur'; }
 function canAdmin(): bool { return !empty($_SESSION['admin']) && staffRole() === 'admin'; }
-function canReadStaff(): bool { return !empty($_SESSION['admin']) && in_array(staffRole(), ['admin', 'formateur'], true); }
+function canReadStaff(): bool { return in_array(staffRole(), ['admin', 'formateur'], true); }
 function currentStaffId(PDO $db): int {
     $username = (string)($_SESSION['staff_username'] ?? '');
     if ($username === '') return 0;
@@ -953,6 +1062,15 @@ function enforceTemporaryPasswordChange(PDO $db, string $action): void {
 clearRecoverableCredentials($db);
 enforceTemporaryPasswordChange($db, (string)$a);
 
+// Protection CSRF : exige un token sur toutes les requêtes sauf l'authentification, l'installation et les réglages publics.
+$csrfExempt = ['whoami', 'install', 'public_settings', 'login'];
+if (!in_array($a, $csrfExempt, true)) {
+    $csrfToken = trim((string)($in['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrfToken)) {
+        out(['error' => 'forbidden', 'msg' => 'Token CSRF invalide ou manquant.']);
+    }
+}
+
 switch ($a) {
 case 'whoami':
     $formations = [];
@@ -967,7 +1085,7 @@ case 'whoami':
         $sf->execute([$_SESSION['staff_username']]);
         $formations = array_column($sf->fetchAll(PDO::FETCH_ASSOC), 'formation_id');
     }
-    out(['role' => role(), 'staff_role' => staffRole(), 'uid' => $_SESSION['uid'] ?? null, 'name' => $_SESSION['name'] ?? null, 'identifier' => $learnerIdentifier, 'formation_id' => $_SESSION['formation_id'] ?? null, 'must_change_password' => !empty($_SESSION['must_change_password']), 'formations' => $formations]);
+    out(['role' => role(), 'staff_role' => staffRole(), 'uid' => $_SESSION['uid'] ?? null, 'name' => $_SESSION['name'] ?? null, 'identifier' => $learnerIdentifier, 'formation_id' => $_SESSION['formation_id'] ?? null, 'must_change_password' => !empty($_SESSION['must_change_password']), 'formations' => $formations, 'csrf_token' => $_SESSION['csrf_token'] ?? '']);
 
 case 'public_settings':
     out(['public_registration' => (cfg($db, 'public_registration') ?? '0') === '1']);
@@ -981,8 +1099,14 @@ case 'account_login':
 
 case 'learner_dashboard':
     if (role() !== 'learner') out(['error' => 'forbidden']);
-    $uid = (string)($_SESSION['uid'] ?? ''); $s = $db->prepare('SELECT e.id,e.formation_id,f.name formation_name,e.module_id,m.name module_name,e.score,e.total,e.percentage,e.duration_seconds,e.created FROM evaluations e LEFT JOIN formations f ON f.id=e.formation_id LEFT JOIN modules m ON m.id=e.module_id WHERE e.learner_uid=? ORDER BY e.created DESC LIMIT 100'); $s->execute([$uid]); $rows = $s->fetchAll(PDO::FETCH_ASSOC);
-    $formations = $db->query('SELECT COUNT(*) FROM formations WHERE active=1')->fetchColumn(); out(['test_count' => count($rows), 'formation_count' => (int)$formations, 'latest' => array_slice($rows, 0, 5), 'history' => $rows]);
+    $uid = (string)($_SESSION['uid'] ?? '');
+    $profileQuery = $db->prepare("SELECT learner_uid,first_name,last_name,COALESCE(NULLIF(identifier,''),learner_uid) AS identifier FROM learner_accounts WHERE learner_uid=? AND active=1 LIMIT 1");
+    $profileQuery->execute([$uid]);
+    $profile = $profileQuery->fetch(PDO::FETCH_ASSOC);
+    if (!$profile) out(['error' => 'not_found']);
+    $s = $db->prepare('SELECT e.id,e.formation_id,f.name formation_name,e.module_id,m.name module_name,e.score,e.total,e.percentage,e.duration_seconds,e.created FROM evaluations e LEFT JOIN formations f ON f.id=e.formation_id LEFT JOIN modules m ON m.id=e.module_id WHERE e.learner_uid=? ORDER BY e.created DESC LIMIT 100'); $s->execute([$uid]); $rows = $s->fetchAll(PDO::FETCH_ASSOC);
+    $formations = $db->query('SELECT COUNT(*) FROM formations WHERE active=1')->fetchColumn();
+    out(['learner_uid' => (string)$profile['learner_uid'], 'identifier' => (string)$profile['identifier'], 'first_name' => (string)$profile['first_name'], 'last_name' => (string)$profile['last_name'], 'learner_name' => trim((string)$profile['first_name'].' '.(string)$profile['last_name']), 'test_count' => count($rows), 'formation_count' => (int)$formations, 'latest' => array_slice($rows, 0, 5), 'history' => $rows]);
 
 case 'test_grades':
     if (role() === 'learner') {
@@ -1325,7 +1449,7 @@ case 'test_attempt_history':
     if(role()!== 'learner')out(['error'=>'forbidden']);$uid=(string)$_SESSION['uid'];$mode=trim((string)($in['mode']??''));$sql='SELECT ta.id,ta.formation_id,f.name formation_name,ta.module_id,m.name module_name,ta.level_id,CASE WHEN ta.mode="examen" THEN "Examen général" ELSE l.name END level_name,ta.mode,ta.attempt_number,ta.status,ta.started_at,ta.submitted_at,ta.score,ta.total,ta.percentage,ta.duration_seconds FROM test_attempts ta LEFT JOIN formations f ON f.id=ta.formation_id LEFT JOIN modules m ON m.id=ta.module_id LEFT JOIN test_levels l ON l.id=ta.level_id WHERE ta.learner_uid=?';$params=[$uid];if(in_array($mode,['parcours','entrainement','examen'],true)){$sql.=' AND ta.mode=?';$params[]=$mode;}$sql.=' ORDER BY ta.started_at DESC LIMIT 200';$s=$db->prepare($sql);$s->execute($params);out(['attempts'=>$s->fetchAll(PDO::FETCH_ASSOC)]);
 
 case 'trainer_levels_list':
-    if (!canReadStaff()) out(['error' => 'forbidden']);
+    if (!canTrainer()) out(['error' => 'forbidden']);
     $sql = 'SELECT l.id,l.formation_id,f.name formation_name,l.module_id,l.name,l.position,l.attempts_allowed,l.pass_percent,(SELECT COUNT(*) FROM questions q WHERE q.level_id=l.id AND q.active=1) own_questions FROM test_levels l JOIN formations f ON f.id=l.formation_id WHERE l.active=1';
     $params = [];
     if (canTrainer()) { $sql .= ' AND l.formation_id IN (SELECT formation_id FROM staff_formations WHERE staff_id=?)'; $params[] = currentStaffId($db); }
@@ -1449,8 +1573,9 @@ case 'login':
     if ($staffRole !== '') {
         session_regenerate_id(true);
         if ($remember) { $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'); session_set_cookie_params(['lifetime' => 2592000, 'httponly' => true, 'samesite' => 'Lax', 'secure' => $secure]); setcookie(session_name(), session_id(), time() + 2592000, '/', '', $secure, true); }
-        $_SESSION['admin'] = true; $_SESSION['staff_role'] = $staffRole; $_SESSION['staff_username'] = $u; $_SESSION['must_change_password'] = $mustChange; $_SESSION['last_activity'] = time();
-        unset($_SESSION['uid'], $_SESSION['name'], $_SESSION['formation_id']); out(['ok' => true, 'role' => $staffRole, 'must_change_password' => $mustChange]);
+        if ($staffRole === 'admin') { $_SESSION['admin'] = true; }
+        $_SESSION['staff_role'] = $staffRole; $_SESSION['staff_username'] = $u; $_SESSION['must_change_password'] = $mustChange; $_SESSION['last_activity'] = time();
+        unset($_SESSION['uid'], $_SESSION['name'], $_SESSION['formation_id']); out(['ok' => true, 'role' => $staffRole, 'must_change_password' => $mustChange, 'csrf_token' => $_SESSION['csrf_token'] ?? '']);
     }
 
     $s = $db->prepare('SELECT learner_uid,first_name,last_name,email,identifier,password_hash,active,formation_id,must_change_password FROM learner_accounts WHERE LOWER(email)=? OR LOWER(identifier)=?');
@@ -1459,7 +1584,7 @@ case 'login':
         session_regenerate_id(true);
         if ($remember) { $secure = !empty($_SERVER['HTTPS']) || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'); session_set_cookie_params(['lifetime' => 2592000, 'httponly' => true, 'samesite' => 'Lax', 'secure' => $secure]); setcookie(session_name(), session_id(), time() + 2592000, '/', '', $secure, true); }
         $_SESSION['uid'] = (string)$account['learner_uid']; $_SESSION['name'] = $account['first_name'].' '.$account['last_name']; $_SESSION['formation_id'] = (string)($account['formation_id'] ?? ''); $_SESSION['must_change_password'] = (int)$account['must_change_password'] === 1; $_SESSION['last_activity'] = time();
-        unset($_SESSION['admin'], $_SESSION['staff_role'], $_SESSION['staff_username']); out(['ok' => true, 'role' => 'learner', 'name' => $_SESSION['name'], 'identifier' => (string)$account['identifier'], 'formation_id' => $_SESSION['formation_id'], 'must_change_password' => $_SESSION['must_change_password']]);
+        unset($_SESSION['admin'], $_SESSION['staff_role'], $_SESSION['staff_username']); out(['ok' => true, 'role' => 'learner', 'name' => $_SESSION['name'], 'identifier' => (string)$account['identifier'], 'formation_id' => $_SESSION['formation_id'], 'must_change_password' => $_SESSION['must_change_password'], 'csrf_token' => $_SESSION['csrf_token'] ?? '']);
     }
 
     // Les anciens comptes historiques sans mot de passe ni formation ne peuvent plus se connecter.
@@ -1485,8 +1610,15 @@ case 'change_temporary_password':
     $new = (string)($in['new'] ?? ''); $confirm = (string)($in['confirm'] ?? '');
     if (strlen($new) < 12) out(['ok' => false, 'msg' => 'Le nouveau mot de passe doit contenir au moins 12 caractères.']);
     if (!hash_equals($new, $confirm)) out(['ok' => false, 'msg' => 'Les mots de passe ne sont pas identiques.']);
-    if (!empty($_SESSION['admin'])) {
-        $u = (string)($_SESSION['staff_username'] ?? ''); $s = $db->prepare('UPDATE staff SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE LOWER(username)=LOWER(?)'); $s->execute([password_hash($new, PASSWORD_DEFAULT),$u]);
+    if (in_array(staffRole(), ['admin', 'formateur'], true) && !empty($_SESSION['staff_username'])) {
+        $u = (string)$_SESSION['staff_username'];
+        if (staffRole() === 'admin' && strcasecmp($u, (string)cfg($db, 'admin_user')) === 0) {
+            setCfg($db, 'admin_hash', password_hash($new, PASSWORD_DEFAULT));
+        } else {
+            $s = $db->prepare('UPDATE staff SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE LOWER(username)=LOWER(?) AND active=1');
+            $s->execute([password_hash($new, PASSWORD_DEFAULT), $u]);
+            if ($s->rowCount() !== 1) out(['error' => 'forbidden']);
+        }
     } elseif (!empty($_SESSION['uid'])) {
         $uid = (string)$_SESSION['uid']; $s = $db->prepare('UPDATE learner_accounts SET password_hash=?,must_change_password=0,temporary_password=0,credential_cipher="" WHERE learner_uid=?'); $s->execute([password_hash($new, PASSWORD_DEFAULT),$uid]);
     } else out(['error' => 'forbidden']);
@@ -1749,6 +1881,34 @@ case 'learner_reset_password':
     out(['ok' => true, 'identifier' => $identifier, 'temporary_password' => $p]);
 
 case 'learner_update':
+    if (role() === 'learner') {
+        if (array_key_exists('formation_id', $in)) out(['error' => 'forbidden']);
+        $name = trim(preg_replace('/\s+/u', ' ', (string)($in['name'] ?? '')));
+        if ($name === '' || mb_strlen($name) > 201) out(['ok' => false, 'msg' => 'Le nom doit contenir au plus 201 caractères.']);
+        $uid = (string)$_SESSION['uid'];
+        $row = $db->prepare('SELECT id FROM learners WHERE learner_uid=? LIMIT 1');
+        $row->execute([$uid]);
+        $learnerId = $row->fetchColumn();
+        if ($learnerId === false) out(['error' => 'not_found']);
+        $normalized = nm($name);
+        $nameCheck = $db->prepare('SELECT 1 FROM learners WHERE normalized_name=? AND learner_uid<>? LIMIT 1');
+        $nameCheck->execute([$normalized, $uid]);
+        if ($nameCheck->fetchColumn()) $normalized .= ' ' . $uid;
+        $parts = preg_split('/\s+/u', $name, 2);
+        $first = $parts[0] ?? '';
+        $last = $parts[1] ?? '';
+        $db->beginTransaction();
+        try {
+            $db->prepare('UPDATE learners SET name=?,normalized_name=? WHERE id=?')->execute([$name, $normalized, (int)$learnerId]);
+            $db->prepare('UPDATE learner_accounts SET first_name=?,last_name=? WHERE learner_uid=?')->execute([$first, $last, $uid]);
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+        $_SESSION['name'] = $name;
+        out(['ok' => true]);
+    }
     if (!canTrainer() && !canAdmin()) out(['error' => 'forbidden']);
     $id = filter_var($in['id'] ?? null, FILTER_VALIDATE_INT);
     if ($id && canTrainer() && !trainerOwnsLearner($db, currentStaffId($db), (int)$id)) out(['error' => 'forbidden']);

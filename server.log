@@ -1,0 +1,382 @@
+[Mon Nov 16 19:05:37 2026] PHP 8.3.30 Development Server (http://127.0.0.1:8888) started
+[Mon Nov 16 19:05:38 2026] 127.0.0.1:61425 Accepted
+[Mon Nov 16 19:05:38 2026] [32m127.0.0.1:61425 [200]: GET /ping.html[0m
+[Mon Nov 16 19:05:38 2026] 127.0.0.1:61425 Closing
+[Mon Nov 16 19:05:54 2026] 127.0.0.1:61434 Accepted
+[Mon Nov 16 19:05:54 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:05:55 2026] [32m127.0.0.1:61434 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:05:55 2026] 127.0.0.1:61434 Closing
+[Mon Nov 16 19:06:07 2026] 127.0.0.1:55662 Accepted
+[Mon Nov 16 19:06:07 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:06:08 2026] [32m127.0.0.1:55662 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:06:08 2026] 127.0.0.1:55662 Closing
+[Mon Nov 16 19:06:08 2026] 127.0.0.1:55663 Accepted
+[Mon Nov 16 19:06:08 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:06:09 2026] [32m127.0.0.1:55663 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:06:09 2026] 127.0.0.1:55663 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:51569 Accepted
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:51569 [200]: GET /[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:51569 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:62726 Accepted
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:60304 Accepted
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:62726 [200]: GET /vendor/bootstrap/bootstrap.min.css[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:62726 Closing
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:60304 [200]: GET /vendor/bootstrap-icons/bootstrap-icons.min.css[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:58252 Accepted
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:58840 Accepted
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:58252 [200]: GET /image/logo.png[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:60304 Closing
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:58840 [200]: GET /shim.js[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:58252 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:58840 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:64006 Accepted
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:64006 [200]: GET /image/ndartech-background-16x9.jpg[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:64006 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:56058 Accepted
+[Mon Nov 16 19:09:51 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:56058 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:56058 Closing
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:65404 Accepted
+[Mon Nov 16 19:09:51 2026] [32m127.0.0.1:65404 [200]: GET /image/logo.png[0m
+[Mon Nov 16 19:09:51 2026] 127.0.0.1:65404 Closing
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:56432 Accepted
+[Mon Nov 16 19:10:16 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:16 2026] [32m127.0.0.1:56432 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:56432 Closing
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:62342 Accepted
+[Mon Nov 16 19:10:16 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:16 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:16 2026] [32m127.0.0.1:62342 [200]: POST /api.php?a=staff_list[0m
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:62342 Closing
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:59086 Accepted
+[Mon Nov 16 19:10:16 2026] 127.0.0.1:63566 Accepted
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:59086 [200]: POST /api.php?a=admin_dashboard[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:59086 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:56560 Accepted
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:63566 [200]: POST /api.php?a=formations_list[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:63566 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:59338 Accepted
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:56560 [200]: POST /api.php?a=evaluations_list[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:56560 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:58451 Accepted
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:59338 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:59338 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:54174 Accepted
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:58451 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:58451 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:50344 Accepted
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:54174 [200]: GET /vendor/bootstrap-icons/fonts/bootstrap-icons.woff2?e34853135f9e39acf64315236852cd5a[0m
+[Mon Nov 16 19:10:17 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:17 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:17 2026] [32m127.0.0.1:50344 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:50344 Closing
+[Mon Nov 16 19:10:17 2026] 127.0.0.1:54174 Closing
+[Mon Nov 16 19:10:23 2026] 127.0.0.1:64604 Accepted
+[Mon Nov 16 19:10:23 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:23 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:23 2026] [32m127.0.0.1:64604 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:10:23 2026] 127.0.0.1:64604 Closing
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:64087 Accepted
+[Mon Nov 16 19:10:29 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:29 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:29 2026] [32m127.0.0.1:64087 [200]: POST /api.php?a=trainer_levels_list[0m
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:64087 Closing
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:62102 Accepted
+[Mon Nov 16 19:10:29 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:29 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:29 2026] [32m127.0.0.1:62102 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:62102 Closing
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:59426 Accepted
+[Mon Nov 16 19:10:29 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:29 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:29 2026] [32m127.0.0.1:59426 [200]: POST /api.php?a=test_trainer_results[0m
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:59426 Closing
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:50699 Accepted
+[Mon Nov 16 19:10:29 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:29 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:29 2026] [32m127.0.0.1:50699 [200]: POST /api.php?a=trainer_actions_list[0m
+[Mon Nov 16 19:10:29 2026] 127.0.0.1:50699 Closing
+[Mon Nov 16 19:10:35 2026] 127.0.0.1:62244 Accepted
+[Mon Nov 16 19:10:35 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:35 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:10:35 2026] [32m127.0.0.1:62244 [200]: POST /api.php?a=logout[0m
+[Mon Nov 16 19:10:35 2026] 127.0.0.1:62244 Closing
+[Mon Nov 16 19:10:35 2026] 127.0.0.1:52896 Accepted
+[Mon Nov 16 19:10:35 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:10:35 2026] [32m127.0.0.1:52896 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 19:10:35 2026] 127.0.0.1:52896 Closing
+[Mon Nov 16 19:11:05 2026] 127.0.0.1:64570 Accepted
+[Mon Nov 16 19:11:05 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:06 2026] [32m127.0.0.1:64570 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:11:06 2026] 127.0.0.1:64570 Closing
+[Mon Nov 16 19:11:18 2026] 127.0.0.1:55712 Accepted
+[Mon Nov 16 19:11:18 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:19 2026] [32m127.0.0.1:55712 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:11:19 2026] 127.0.0.1:55712 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:60552 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:60552 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:60552 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:58978 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:58978 [200]: POST /api.php?a=staff_list[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:58978 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:52625 Accepted
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:52892 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:52625 [200]: POST /api.php?a=admin_dashboard[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:52625 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:59073 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:52892 [200]: POST /api.php?a=formations_list[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:52892 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:56332 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:59073 [200]: POST /api.php?a=evaluations_list[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:59073 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:59024 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:56332 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:56332 Closing
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:59024 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:59024 Closing
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:51884 Accepted
+[Mon Nov 16 19:11:41 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 19:11:41 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 19:11:41 2026] [32m127.0.0.1:51884 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 19:11:41 2026] 127.0.0.1:51884 Closing
+[Mon Nov 16 21:44:58 2026] 127.0.0.1:61338 Accepted
+[Mon Nov 16 21:44:58 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:44:58 2026] [32m127.0.0.1:61338 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:44:58 2026] 127.0.0.1:61338 Closing
+[Mon Nov 16 21:44:58 2026] 127.0.0.1:61339 Accepted
+[Mon Nov 16 21:44:58 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:44:58 2026] [32m127.0.0.1:61339 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:44:58 2026] 127.0.0.1:61339 Closing
+[Mon Nov 16 21:44:58 2026] 127.0.0.1:64504 Accepted
+[Mon Nov 16 21:44:58 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:44:59 2026] [32m127.0.0.1:64504 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:44:59 2026] 127.0.0.1:64504 Closing
+[Mon Nov 16 21:45:08 2026] 127.0.0.1:55715 Accepted
+[Mon Nov 16 21:45:08 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:45:08 2026] [32m127.0.0.1:55715 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:45:08 2026] 127.0.0.1:55715 Closing
+[Mon Nov 16 21:45:09 2026] 127.0.0.1:55716 Accepted
+[Mon Nov 16 21:45:09 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:45:09 2026] [32m127.0.0.1:55716 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:45:09 2026] 127.0.0.1:55716 Closing
+[Mon Nov 16 21:46:48 2026] 127.0.0.1:64566 Accepted
+[Mon Nov 16 21:46:48 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:46:48 2026] [32m127.0.0.1:64566 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:46:48 2026] 127.0.0.1:64566 Closing
+[Mon Nov 16 21:46:58 2026] 127.0.0.1:59481 Accepted
+[Mon Nov 16 21:46:58 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:46:58 2026] [32m127.0.0.1:59481 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:46:59 2026] 127.0.0.1:59481 Closing
+[Mon Nov 16 21:47:14 2026] 127.0.0.1:51546 Accepted
+[Mon Nov 16 21:47:14 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:14 2026] [32m127.0.0.1:51546 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:14 2026] 127.0.0.1:51546 Closing
+[Mon Nov 16 21:47:15 2026] 127.0.0.1:51547 Accepted
+[Mon Nov 16 21:47:15 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:15 2026] [32m127.0.0.1:51547 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:15 2026] 127.0.0.1:51547 Closing
+[Mon Nov 16 21:47:23 2026] 127.0.0.1:58507 Accepted
+[Mon Nov 16 21:47:23 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:23 2026] [32m127.0.0.1:58507 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:23 2026] 127.0.0.1:58507 Closing
+[Mon Nov 16 21:47:23 2026] 127.0.0.1:58508 Accepted
+[Mon Nov 16 21:47:23 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:23 2026] [33m127.0.0.1:58508 [403]: POST /api.php?a=test_levels_list[0m
+[Mon Nov 16 21:47:23 2026] 127.0.0.1:58508 Closing
+[Mon Nov 16 21:47:30 2026] 127.0.0.1:55699 Accepted
+[Mon Nov 16 21:47:30 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:30 2026] [32m127.0.0.1:55699 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:30 2026] 127.0.0.1:55699 Closing
+[Mon Nov 16 21:47:31 2026] 127.0.0.1:55700 Accepted
+[Mon Nov 16 21:47:31 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:31 2026] [33m127.0.0.1:55700 [403]: POST /api.php?a=test_levels_list[0m
+[Mon Nov 16 21:47:31 2026] 127.0.0.1:55700 Closing
+[Mon Nov 16 21:47:39 2026] 127.0.0.1:54760 Accepted
+[Mon Nov 16 21:47:40 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:40 2026] [32m127.0.0.1:54760 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:40 2026] 127.0.0.1:54760 Closing
+[Mon Nov 16 21:47:40 2026] 127.0.0.1:54761 Accepted
+[Mon Nov 16 21:47:40 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:40 2026] [32m127.0.0.1:54761 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:47:40 2026] 127.0.0.1:54761 Closing
+[Mon Nov 16 21:47:40 2026] 127.0.0.1:54762 Accepted
+[Mon Nov 16 21:47:40 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:47:40 2026] [33m127.0.0.1:54762 [403]: POST /api.php?a=test_levels_list[0m
+[Mon Nov 16 21:47:40 2026] 127.0.0.1:54762 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:53272 Accepted
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:53272 [200]: GET /[0m
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:53272 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:51747 Accepted
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:51747 [200]: GET /vendor/bootstrap/bootstrap.min.css[0m
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:51747 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:65534 Accepted
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:51689 Accepted
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:61700 Accepted
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:65534 [200]: GET /vendor/bootstrap-icons/bootstrap-icons.min.css[0m
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:51689 [200]: GET /image/logo.png[0m
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:61700 [200]: GET /shim.js[0m
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:65534 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:51689 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:61700 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:58948 Accepted
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:58948 [200]: GET /image/ndartech-background-16x9.jpg[0m
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:58948 Closing
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:53681 Accepted
+[Mon Nov 16 21:51:13 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:13 2026] [32m127.0.0.1:53681 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 21:51:13 2026] 127.0.0.1:53681 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:50118 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:50118 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:50118 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58716 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:58716 [200]: POST /api.php?a=staff_list[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58716 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:57557 Accepted
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58342 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:57557 [200]: POST /api.php?a=admin_dashboard[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:57557 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:51397 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:58342 [200]: POST /api.php?a=formations_list[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58342 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58618 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:51397 [200]: POST /api.php?a=evaluations_list[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:51397 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:51090 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:58618 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:58618 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:57768 Accepted
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:51090 [200]: POST /api.php?a=whoami[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:51090 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:62394 Accepted
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:57768 [200]: GET /vendor/bootstrap-icons/fonts/bootstrap-icons.woff2?e34853135f9e39acf64315236852cd5a[0m
+[Mon Nov 16 21:51:39 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:39 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:39 2026] [32m127.0.0.1:62394 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:62394 Closing
+[Mon Nov 16 21:51:39 2026] 127.0.0.1:57768 Closing
+[Mon Nov 16 21:51:42 2026] 127.0.0.1:58607 Accepted
+[Mon Nov 16 21:51:42 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:42 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:42 2026] [32m127.0.0.1:58607 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:51:42 2026] 127.0.0.1:58607 Closing
+[Mon Nov 16 21:51:45 2026] 127.0.0.1:51622 Accepted
+[Mon Nov 16 21:51:45 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:46 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:46 2026] [32m127.0.0.1:51622 [200]: POST /api.php?a=trainer_levels_list[0m
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:51622 Closing
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:52934 Accepted
+[Mon Nov 16 21:51:46 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:46 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:46 2026] [32m127.0.0.1:52934 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:52934 Closing
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:64647 Accepted
+[Mon Nov 16 21:51:46 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:46 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:46 2026] [32m127.0.0.1:64647 [200]: POST /api.php?a=test_trainer_results[0m
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:64647 Closing
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:59126 Accepted
+[Mon Nov 16 21:51:46 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:46 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:46 2026] [32m127.0.0.1:59126 [200]: POST /api.php?a=trainer_actions_list[0m
+[Mon Nov 16 21:51:46 2026] 127.0.0.1:59126 Closing
+[Mon Nov 16 21:51:49 2026] 127.0.0.1:61727 Accepted
+[Mon Nov 16 21:51:49 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:49 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:49 2026] [32m127.0.0.1:61727 [200]: POST /api.php?a=trainer_levels_list[0m
+[Mon Nov 16 21:51:49 2026] 127.0.0.1:61727 Closing
+[Mon Nov 16 21:51:49 2026] 127.0.0.1:50772 Accepted
+[Mon Nov 16 21:51:49 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:49 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:49 2026] [32m127.0.0.1:50772 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:51:49 2026] 127.0.0.1:50772 Closing
+[Mon Nov 16 21:51:49 2026] 127.0.0.1:59315 Accepted
+[Mon Nov 16 21:51:49 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:50 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:50 2026] [32m127.0.0.1:59315 [200]: POST /api.php?a=test_trainer_results[0m
+[Mon Nov 16 21:51:50 2026] 127.0.0.1:59315 Closing
+[Mon Nov 16 21:51:50 2026] 127.0.0.1:59935 Accepted
+[Mon Nov 16 21:51:50 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:50 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:50 2026] [32m127.0.0.1:59935 [200]: POST /api.php?a=trainer_actions_list[0m
+[Mon Nov 16 21:51:50 2026] 127.0.0.1:59935 Closing
+[Mon Nov 16 21:51:55 2026] 127.0.0.1:52518 Accepted
+[Mon Nov 16 21:51:55 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:51:55 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:51:55 2026] [32m127.0.0.1:52518 [200]: POST /api.php?a=admin_dashboard[0m
+[Mon Nov 16 21:51:55 2026] 127.0.0.1:52518 Closing
+[Mon Nov 16 21:52:08 2026] 127.0.0.1:59140 Accepted
+[Mon Nov 16 21:52:08 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:08 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:08 2026] [32m127.0.0.1:59140 [200]: POST /api.php?a=evaluations_list[0m
+[Mon Nov 16 21:52:08 2026] 127.0.0.1:59140 Closing
+[Mon Nov 16 21:52:08 2026] 127.0.0.1:65010 Accepted
+[Mon Nov 16 21:52:08 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:08 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:08 2026] [32m127.0.0.1:65010 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:52:08 2026] 127.0.0.1:65010 Closing
+[Mon Nov 16 21:52:10 2026] 127.0.0.1:53911 Accepted
+[Mon Nov 16 21:52:10 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:10 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:10 2026] [32m127.0.0.1:53911 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:52:10 2026] 127.0.0.1:53911 Closing
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:61591 Accepted
+[Mon Nov 16 21:52:21 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:21 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:21 2026] [32m127.0.0.1:61591 [200]: POST /api.php?a=trainer_levels_list[0m
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:61591 Closing
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:65224 Accepted
+[Mon Nov 16 21:52:21 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:21 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:21 2026] [32m127.0.0.1:65224 [200]: POST /api.php?a=learner_list[0m
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:65224 Closing
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:54250 Accepted
+[Mon Nov 16 21:52:21 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:21 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:21 2026] [32m127.0.0.1:54250 [200]: POST /api.php?a=test_trainer_results[0m
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:54250 Closing
+[Mon Nov 16 21:52:21 2026] 127.0.0.1:60359 Accepted
+[Mon Nov 16 21:52:22 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:52:22 2026] qcm: SQLSTATE[HY000]: General error: 1 no such column: staff_id
+[Mon Nov 16 21:52:22 2026] [32m127.0.0.1:60359 [200]: POST /api.php?a=trainer_actions_list[0m
+[Mon Nov 16 21:52:22 2026] 127.0.0.1:60359 Closing
+[Mon Nov 16 21:54:10 2026] 127.0.0.1:58189 Accepted
+[Mon Nov 16 21:54:10 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:54:10 2026] [32m127.0.0.1:58189 [200]: POST /api.php?a=login[0m
+[Mon Nov 16 21:54:10 2026] 127.0.0.1:58189 Closing
+[Mon Nov 16 21:54:10 2026] 127.0.0.1:58190 Accepted
+[Mon Nov 16 21:54:10 2026] qcm: WARNING: NDARTECH_SALT non définie, utilisation du SALT par défaut
+[Mon Nov 16 21:54:10 2026] [33m127.0.0.1:58190 [403]: POST /api.php?a=trainer_levels_list[0m
+[Mon Nov 16 21:54:10 2026] 127.0.0.1:58190 Closing

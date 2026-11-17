@@ -3,6 +3,7 @@
 // du JSON (page de vérification), le cookie est renouvelé via ping.html puis la requête est rejouée une fois.
 (function () {
   var me = { role: "none", uid: null, name: null };
+  var csrfToken = null;
   function renewCookie() {
     return new Promise(function (res) {
       var f = document.createElement("iframe");
@@ -12,9 +13,11 @@
     });
   }
   function API(a, body, retried) {
+    var headers = { "Content-Type": "application/json", "X-Requested-With": "qcm" };
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
     return fetch("api.php?a=" + a, {
       method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Requested-With": "qcm" },
+      headers: headers,
       body: JSON.stringify(body || {})
     }).then(function (r) { return r.text(); }).then(function (t) {
       try { return JSON.parse(t); }
@@ -60,7 +63,7 @@
   }
   window.API = API;
   window.claude = {
-    refresh: function () { return API("whoami").then(function (r) { me = r; return r; }); },
+    refresh: function () { return API("whoami").then(function (r) { me = r; if (r.csrf_token) csrfToken = r.csrf_token; return r; }); },
     use: function (name) {
       if (name === "user") return Promise.resolve({ id: function () { return Promise.resolve(me.uid); }, isOwner: function () { return Promise.resolve(me.role === "admin"); } });
       if (name === "db") return Promise.resolve({ doc: doc, collection: collection });

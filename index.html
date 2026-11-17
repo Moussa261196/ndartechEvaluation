@@ -703,7 +703,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="learner-card card shadow-sm"><h2 class="learner-view-title"><i class="bi bi-question-circle" aria-hidden="true"></i><span>Aide et règles</span></h2><h3 class="h5">Comment progresser ?</h3><p>Commencez par l’entraînement pour vous familiariser avec les questions, puis passez au Parcours pour valider une étape.</p><ul class="list-group list-group-flush mb-3"><li class="list-group-item"><i class="bi bi-lightning-charge text-primary me-2" aria-hidden="true"></i><b>Entraînement :</b> illimité, correction immédiate, sans déblocage.</li><li class="list-group-item"><i class="bi bi-signpost-2 text-primary me-2" aria-hidden="true"></i><b>Parcours :</b> 25 questions au maximum; il faut atteindre le seuil affiché pour débloquer l’étape suivante.</li><li class="list-group-item"><i class="bi bi-journal-check text-primary me-2" aria-hidden="true"></i><b>Examen général :</b> jusqu’à 25 questions aléatoires prises dans les niveaux de votre formation; dates et tentatives sont fixées par votre formateur.</li></ul><p>Après trois échecs au Parcours, attendez une heure avant de réessayer. Profitez de ce délai pour vous entraîner; l’accès est rétabli automatiquement. Les bonnes réponses ne sont pas affichées après un échec. Contactez votre formateur uniquement pour un problème d’accès à votre compte.</p></div>
     </section>
     <section class="learner-view" data-learner-panel="profile" hidden>
-      <div class="learner-card card shadow-sm"><h2 class="learner-view-title"><i class="bi bi-person-circle" aria-hidden="true"></i><span>Mon profil</span></h2><p id="profileName"></p><p id="profileIdentifier" class="muted"></p><h3 class="h5 mt-4">Changer mon mot de passe</h3><div class="learner-profile-grid"><label class="form-label" for="learnerCurrentPassword">Mot de passe actuel</label><input class="form-control" id="learnerCurrentPassword" type="password" autocomplete="current-password"><label class="form-label" for="learnerNewPassword">Nouveau mot de passe (12 caractères minimum)</label><input class="form-control" id="learnerNewPassword" type="password" autocomplete="new-password"><label class="form-label" for="learnerConfirmPassword">Confirmer le nouveau mot de passe</label><input class="form-control" id="learnerConfirmPassword" type="password" autocomplete="new-password"></div><div class="learner-actions mt-3"><button class="btn btn-primary learner-icon-action" type="button" id="learnerPasswordSave"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Mettre à jour le mot de passe</span></button></div><p id="learnerPasswordMessage" role="status" aria-live="polite"></p></div>
+      <div class="learner-card card shadow-sm"><h2 class="learner-view-title"><i class="bi bi-person-circle" aria-hidden="true"></i><span>Mon profil</span></h2><p id="profileName"></p><p id="profileIdentifier" class="muted"></p><h3 class="h5 mt-4">Modifier mes informations</h3><div class="learner-profile-grid"><div class="row g-3"><div class="col-md-6"><label class="form-label" for="learnerFirstName">Prénom</label><input class="form-control" id="learnerFirstName" type="text" autocomplete="given-name" value=""></div><div class="col-md-6"><label class="form-label" for="learnerLastName">Nom</label><input class="form-control" id="learnerLastName" type="text" autocomplete="family-name" value=""></div></div></div><div class="learner-actions mt-3"><button class="btn btn-primary learner-icon-action" type="button" id="learnerNameSave"><i class="bi bi-person-check" aria-hidden="true"></i><span>Enregistrer les modifications</span></button></div><p id="learnerNameMessage" role="status" aria-live="polite"></p></div><h3 class="h5 mt-4">Changer mon mot de passe</h3><div class="learner-profile-grid"><label class="form-label" for="learnerCurrentPassword">Mot de passe actuel</label><input class="form-control" id="learnerCurrentPassword" type="password" autocomplete="current-password"><label class="form-label" for="learnerNewPassword">Nouveau mot de passe (12 caractères minimum)</label><input class="form-control" id="learnerNewPassword" type="password" autocomplete="new-password"><label class="form-label" for="learnerConfirmPassword">Confirmer le nouveau mot de passe</label><input class="form-control" id="learnerConfirmPassword" type="password" autocomplete="new-password"></div><div class="learner-actions mt-3"><button class="btn btn-primary learner-icon-action" type="button" id="learnerPasswordSave"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Mettre à jour le mot de passe</span></button></div><p id="learnerPasswordMessage" role="status" aria-live="polite"></p></div>
     </section>
   </div>
 </div>
@@ -731,6 +731,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <button id="navLearners" type="button" data-p="pA"><i class="bi bi-people" aria-hidden="true"></i>Apprenants</button>
     <button id="navResults" type="button" data-p="pR"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Résultats des tests</button>
     <button id="navGrades" type="button" data-p="pN"><i class="bi bi-award" aria-hidden="true"></i>Notes & évaluations</button>
+    <button id="navRanking" type="button" data-p="pC"><i class="bi bi-trophy" aria-hidden="true"></i>Classement</button>
     <button id="navTests" type="button" data-p="pT"><i class="bi bi-journal-check" aria-hidden="true"></i>Tests & examens</button>
     <button id="navSecurity" type="button" data-p="pS"><i class="bi bi-shield-lock" aria-hidden="true"></i>Sécurité</button>
     <button id="navAnswerKey" type="button" data-p="pK"><i class="bi bi-patch-check" aria-hidden="true"></i>Corrigé</button>
@@ -856,6 +857,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <h3 style="margin-top:28px"><i class="bi bi-calculator me-2" aria-hidden="true"></i>Notes calculées</h3>
 <p class="muted staff-grade-formula">Le Parcours vaut 10/10 si les 6 étapes sont validées, et l’examen général 10/10 s’il est réussi. Total des tests = Parcours + examen général (/20). Moyenne finale = (total des tests + moyenne des projets) ÷ 2. La présentation est incluse dans la moyenne des projets.</p>
 <div id="testGradesTable" class="staff-grade-list"></div>
+</div>
+<div class="sp staff-panel card shadow-sm" id="pC" hidden>
+<h2><i class="bi bi-trophy me-2" aria-hidden="true"></i>Classement par formation</h2>
+<p class="muted">Les apprenants sont regroupés par formation et classés par moyenne finale décroissante. Les moyennes provisoires (projet pas encore totalement évalué) apparaissent après les moyennes définitives, puis sont triées par total des tests.</p>
+<div id="gradesRanking" class="staff-grade-list"></div>
 </div>
 <div class="sp staff-panel card shadow-sm" id="pS" hidden>
 <h2><i class="bi bi-shield-lock me-2" aria-hidden="true"></i>Sécurité et sauvegardes</h2>
@@ -1175,10 +1181,25 @@ async function loadLearnerData(){
     ["resumeCard","homeProgressCaption","homeRecent","pathwayProgress","trainingLevels","examLevels","learnerHistoryList","learnerBadges","learnerTestGrade"].forEach(function(id){var el=document.getElementById(id);if(el)el.textContent="Impossible de charger ces informations. Vérifiez votre connexion, puis réessayez."});
   }
 }
+async function loadProfile(){
+  try{
+    var r=await API("learner_dashboard",{});
+    var name=r.learner_name||r.name||"";
+    $("#profileName").textContent="Nom : "+(name||"Non renseigné");
+    $("#learnerFirstName").value=r.first_name||"";
+    $("#learnerLastName").value=r.last_name||"";
+    var identifier=r.identifier||r.learner_uid||"";
+    $("#profileIdentifier").textContent="Identifiant : "+(identifier||"contactez votre formateur pour le retrouver.");
+  }catch(e){
+    $("#profileName").textContent="Nom : Erreur de chargement";
+    $("#profileIdentifier").textContent="Identifiant : Erreur de chargement";
+  }
+}
 function showLearnerView(view){
   document.querySelectorAll("[data-learner-panel]").forEach(function(panel){panel.hidden=panel.getAttribute("data-learner-panel")!==view});
   document.querySelectorAll("[data-learner-view]").forEach(function(button){if(button.getAttribute("data-learner-view")===view){button.setAttribute("aria-current","page");button.classList.add("active")}else{button.removeAttribute("aria-current");button.classList.remove("active")}});
   if(view==="home"||view==="pathway"||view==="training"||view==="exams"||view==="results"||view==="grades"||view==="badges")loadLearnerData();
+    if(view==="profile"){ loadLearnerData(); loadProfile(); }
   window.scrollTo(0,0);
 }
 function renderLearnerHome(){
@@ -1971,6 +1992,7 @@ document.querySelectorAll("#subnav button").forEach(function(b){b.onclick=functi
   if(b.dataset.p==="pD")refreshDashboard();
   if(b.dataset.p==="pR"){refreshDynamicResults();if(window.loadResultsPage)window.loadResultsPage();}
   if(b.dataset.p==="pN"&&window.loadGradesPage)window.loadGradesPage();
+  if(b.dataset.p==="pC"&&window.loadRanking)window.loadRanking();
 }});
 document.querySelectorAll("[data-staff-goto]").forEach(function(button){button.addEventListener("click",function(){var target=document.querySelector('#subnav [data-p="'+button.getAttribute("data-staff-goto")+'"]');if(target&&!target.hidden)target.click()})});
 $("#mkCsv").onclick=function(){saveCsv([["Nom","Identifiant"].map(qq).join(";")].concat(IDS.map(x=>[x.n,x.id].map(qq).join(";"))),"identifiants-apprenants.csv",$("#idsMsg"))};
@@ -2029,6 +2051,16 @@ document.getElementById("learnerPasswordSave").addEventListener("click",async fu
   catch(e){message.textContent="Impossible de modifier le mot de passe. Vérifiez votre connexion, puis réessayez."}
   finally{button.disabled=false}
 });
+document.getElementById("learnerNameSave").addEventListener("click",async function(){
+  var button=this,message=$("#learnerNameMessage"),first=$("#learnerFirstName").value,last=$("#learnerLastName").value;
+  message.textContent="";if(!first||!last){message.textContent="Veuillez entrer le prénom et le nom.";return}
+  button.disabled=true;
+  try{var response=await API("learner_update",{name:(first+" "+last).trim()});if(!response.ok){message.textContent=response.msg||"Impossible de modifier le profil.";return}
+  message.textContent="Profil mis à jour.";
+  await loadProfile()
+  button.disabled=false
+  }catch(e){message.textContent="Impossible de modifier le profil. Vérifiez votre connexion.";button.disabled=false}
+});
 function routeSession(r){
   if(!r||r.role=== "none")return;
   enterPrivate();
@@ -2085,7 +2117,7 @@ document.getElementById("authModal").addEventListener("keydown",function(event){
 document.getElementById("menuBtn").onclick=function(){var expanded=this.getAttribute("aria-expanded")==="true";this.setAttribute("aria-expanded",String(!expanded));document.getElementById("publicNav").classList.toggle("open",!expanded)};
 document.getElementById("publicNav").addEventListener("click",function(event){if(event.target.closest("a")){document.getElementById("menuBtn").setAttribute("aria-expanded","false");this.classList.remove("open")}});
 document.getElementById("currentYear").textContent=new Date().getFullYear();document.getElementById("forgotBtn").onclick=function(){document.getElementById("authError").textContent="Contactez votre administrateur ou votre formateur pour réinitialiser votre mot de passe."};
-document.getElementById("authLogin").onclick=async function(){var e=document.getElementById("authError");e.textContent="";var identifier=document.getElementById("authEmail").value.trim();var secret=document.getElementById("authPassword").value;if(!identifier||!secret){e.textContent="Entrez votre identifiant ou adresse e-mail, puis votre mot de passe.";return}try{var r=await API("login",{identifier:identifier,password:secret,remember:document.getElementById("rememberMe").checked});if(!r.ok){e.textContent=r.msg||"Identifiant ou mot de passe incorrect.";return}var session={role:r.role||"none",staff_role:r.role=== "formateur"?"formateur":(r.role=== "admin"?"admin":"none"),name:r.name||null,identifier:r.identifier||null,formation_id:r.formation_id||null,must_change_password:!!r.must_change_password,formations:r.formations||[]};document.getElementById("authModal").hidden=true;routeSession(session)}catch(x){e.textContent="Connexion impossible pour le moment."}};
+document.getElementById("authLogin").onclick=async function(){var e=document.getElementById("authError");e.textContent="";var identifier=document.getElementById("authEmail").value.trim();var secret=document.getElementById("authPassword").value;if(!identifier||!secret){e.textContent="Entrez votre identifiant ou adresse e-mail, puis votre mot de passe.";return}try{var r=await API("login",{identifier:identifier,password:secret,remember:document.getElementById("rememberMe").checked});if(!r.ok){e.textContent=r.msg||"Identifiant ou mot de passe incorrect.";return}var session={role:r.role||"none",staff_role:r.role=== "formateur"?"formateur":(r.role=== "admin"?"admin":"none"),name:r.name||null,identifier:r.identifier||null,formation_id:r.formation_id||null,must_change_password:!!r.must_change_password,formations:r.formations||[]};document.getElementById("authModal").hidden=true;routeSession(session);await claude.refresh()}catch(x){e.textContent="Connexion impossible pour le moment."}};
 document.getElementById("authPasswordToggle").onclick=function(){var input=document.getElementById("authPassword"),show=input.type=== "password";input.type=show?"text":"password";this.textContent=show?"Masquer":"Afficher";this.setAttribute("aria-pressed",String(show));this.setAttribute("aria-label",show?"Masquer le mot de passe":"Afficher le mot de passe")};
 document.getElementById("authEmail").addEventListener("keydown",function(event){if(event.key==="Enter")document.getElementById("authLogin").click()});
 document.getElementById("authPassword").addEventListener("keydown",function(e){if(e.key=== "Enter")document.getElementById("authLogin").click()});
@@ -2354,6 +2386,57 @@ try{if(typeof claude!=="undefined"&&claude.use)claude.use("user").then(u=>{if(u&
       });
       if(!(p.levels||[]).length)stepList.append(h("li",{text:"Aucune étape configurée."}));
       stepDetails.append(stepList);card.append(stepDetails);gradeBox.append(card);
+    });
+  }
+  async function loadRanking(){
+    var box=$("#gradesRanking");
+    if(!box)return;
+    box.textContent="";
+    box.append(h("p",{class:"staff-empty",role:"status","aria-live":"polite",text:"Chargement du classement…"}));
+    try{
+      var r=await API("test_grades",{});
+      renderGradesRanking(r.grades||[]);
+    }catch(e){
+      box.textContent="";
+      box.append(h("p",{class:"staff-empty",role:"alert",text:"Impossible de charger le classement. Vérifiez la connexion et réessayez."}));
+    }
+  }
+  function renderGradesRanking(grades){
+    var box=$("#gradesRanking");
+    if(!box)return;
+    box.textContent="";
+    if(!grades.length){box.append(h("p",{class:"staff-empty",text:"Aucun apprenant à classer."}));return}
+    var groups={};
+    grades.forEach(function(g){
+      var f=g.formation_name||"Formation non précisée";
+      (groups[f]=(groups[f]||[])).push(g);
+    });
+    Object.keys(groups).sort().forEach(function(formation){
+      var list=groups[formation].slice().sort(function(a,b){
+        var af=a.final_average===null||a.final_average===undefined?-1:Number(a.final_average);
+        var bf=b.final_average===null||b.final_average===undefined?-1:Number(b.final_average);
+        var aa=a.final_average_status==="definitive"?1:0;
+        var ba=b.final_average_status==="definitive"?1:0;
+        if(aa!==ba)return ba-aa;
+        if(af!==bf)return bf-af;
+        var at=Number(a.tests_total===undefined?a.total:a.tests_total)||0;
+        var bt=Number(b.tests_total===undefined?b.total:b.tests_total)||0;
+        return bt-at;
+      });
+      var wrap=h("div",{class:"staff-grade-ranking-group"});
+      wrap.append(h("h4",{text:formation}));
+      var tb=h("table",{},h("thead",{},h("tr",{},["Rang","Apprenant","Moyenne finale","Tests","Projet","Statut"].map(function(t){return h("th",{text:t});}))));
+      var bd=h("tbody");
+      list.forEach(function(g,i){
+        var project=g.project||{};
+        var evaluated=Number(project.graded_count||0),criteria=Number(project.rubric_count||0);
+        var projectValue=g.project_score===null||g.project_score===undefined?"—":Number(g.project_score).toFixed(2).replace(/\.00$/,"")+"/20";
+        var testsValue=Number(g.tests_total===undefined?g.total:g.tests_total)+"/20";
+        var finalValue=g.final_average===null||g.final_average===undefined?"En attente":Number(g.final_average).toFixed(2).replace(/\.00$/,"")+"/20";
+        var stat=g.final_average_status==="definitive"?(g.mention||"Définitive"):"Provisoire · "+evaluated+"/"+criteria+" critères";
+        bd.append(h("tr",{},h("td",{text:i+1}),h("td",{text:g.learner_name||"Apprenant"}),h("td",{text:finalValue}),h("td",{text:testsValue}),h("td",{text:projectValue}),h("td",{class:"muted",text:stat})));
+      });
+      tb.append(bd);wrap.append(tb);box.append(wrap);
     });
   }
   async function loadResultsPage(){
